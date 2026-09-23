@@ -1,0 +1,593 @@
+'use client';
+
+import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
+import { AppShell } from '../../../components/layout/AppShell';
+import { Card } from '../../../components/ui/Card';
+import { Button } from '../../../components/ui/Button';
+import { Input } from '../../../components/ui/Input';
+import { Select } from '../../../components/ui/Select';
+import { Textarea } from '../../../components/ui/Textarea';
+import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
+import { Modal } from '../../../components/ui/Modal';
+import { useToast } from '../../../context/ToastContext';
+import { createSellerProductApi } from '../../../lib/api/products';
+import { ALLOWED_CATEGORIES, AllowedCategory } from '../../../types';
+import {
+  Upload,
+  Image as ImageIcon,
+  X,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  Sparkles,
+  Eye,
+  Send,
+  Save,
+  Package,
+  AlertCircle,
+  HelpCircle,
+  Star,
+} from 'lucide-react';
+
+const ProductBoxScene = dynamic(() => import('../../../components/3d/ProductBoxScene'), {
+  ssr: false,
+  loading: () => <div className="w-full h-[220px] bg-slate-900/50 rounded-2xl animate-pulse" />,
+});
+
+const SuccessBadgeScene = dynamic(() => import('../../../components/3d/SuccessBadgeScene'), {
+  ssr: false,
+  loading: () => <div className="w-full h-[180px] bg-slate-900/50 rounded-2xl animate-pulse" />,
+});
+
+export default function NewProductPage() {
+  const router = useRouter();
+  const toast = useToast();
+
+  // Section 1: Basic Info
+  const [name, setName] = useState('');
+  const [brand, setBrand] = useState('Apex Nutrition');
+  const [sku, setSku] = useState(`APX-${Math.floor(1000 + Math.random() * 9000)}`);
+  const [category, setCategory] = useState<AllowedCategory>('Supplements');
+  const [subCategory, setSubCategory] = useState('Whey Protein');
+
+  // Section 2: Description
+  const [description, setDescription] = useState('');
+  const [shortDescription, setShortDescription] = useState('');
+
+  // Section 3: Pricing
+  const [price, setPrice] = useState<string>('2999');
+  const [compareAtPrice, setCompareAtPrice] = useState<string>('3499');
+
+  // Section 4: Inventory
+  const [stock, setStock] = useState<string>('50');
+  const [lowStockThreshold, setLowStockThreshold] = useState<string>('10');
+
+  // Section 5: Images
+  const [imageUrls, setImageUrls] = useState<string[]>([
+    'https://images.unsplash.com/photo-1579722821273-0f6c7d44362f?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?auto=format&fit=crop&w=800&q=80',
+  ]);
+  const [newImageUrl, setNewImageUrl] = useState('');
+
+  // Section 6: Variants
+  const [variants, setVariants] = useState<Array<{ id: string; title: string; stock: number }>>([
+    { id: '1', title: '1 kg - Chocolate', stock: 25 },
+    { id: '2', title: '2 kg - Vanilla', stock: 25 },
+  ]);
+  const [variantTitle, setVariantTitle] = useState('');
+  const [variantStock, setVariantStock] = useState('10');
+
+  // Section 7: Specifications
+  const [specs, setSpecs] = useState<Array<{ key: string; value: string }>>([
+    { key: 'Serving Size', value: '1 Scoop (30g)' },
+    { key: 'Protein Content', value: '25g per serving' },
+  ]);
+  const [specKey, setSpecKey] = useState('');
+  const [specVal, setSpecVal] = useState('');
+
+  // UI state
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const calculateDiscount = () => {
+    const p = parseFloat(price);
+    const cp = parseFloat(compareAtPrice);
+    if (p && cp && cp > p) {
+      return Math.round(((cp - p) / cp) * 100);
+    }
+    return 0;
+  };
+
+  const addImageUrl = () => {
+    if (newImageUrl.trim()) {
+      setImageUrls([...imageUrls, newImageUrl.trim()]);
+      setNewImageUrl('');
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImageUrls(imageUrls.filter((_, i) => i !== index));
+  };
+
+  const addVariant = () => {
+    if (variantTitle.trim()) {
+      setVariants([
+        ...variants,
+        { id: String(Date.now()), title: variantTitle.trim(), stock: parseInt(variantStock) || 0 },
+      ]);
+      setVariantTitle('');
+    }
+  };
+
+  const removeVariant = (id: string) => {
+    setVariants(variants.filter((v) => v.id !== id));
+  };
+
+  const addSpec = () => {
+    if (specKey.trim() && specVal.trim()) {
+      setSpecs([...specs, { key: specKey.trim(), value: specVal.trim() }]);
+      setSpecKey('');
+      setSpecVal('');
+    }
+  };
+
+  const removeSpec = (index: number) => {
+    setSpecs(specs.filter((_, i) => i !== index));
+  };
+
+  const validateForm = () => {
+    const errs: Record<string, string> = {};
+    if (!name.trim()) errs.name = 'Product name is required.';
+    if (!category) errs.category = 'Category is required.';
+    if (!price || parseFloat(price) <= 0) errs.price = 'Valid price is required.';
+    if (!stock || parseInt(stock) < 0) errs.stock = 'Valid stock quantity is required.';
+    if (imageUrls.length === 0) errs.images = 'At least one product image is required.';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleSubmitConfirmed = async () => {
+    setIsSubmitting(true);
+    try {
+      const specObj: Record<string, string> = {};
+      specs.forEach((s) => {
+        specObj[s.key] = s.value;
+      });
+
+      await createSellerProductApi({
+        name,
+        brand,
+        sku,
+        category,
+        subCategory,
+        description,
+        shortDescription,
+        price: parseFloat(price),
+        compareAtPrice: compareAtPrice ? parseFloat(compareAtPrice) : null,
+        discountPercent: calculateDiscount(),
+        stock: parseInt(stock),
+        lowStockThreshold: parseInt(lowStockThreshold),
+        images: imageUrls,
+        variants: variants.map((v) => ({
+          id: v.id,
+          title: v.title,
+          stock: v.stock,
+          attributes: {},
+        })),
+        specifications: specObj,
+      });
+
+      setIsConfirmModalOpen(false);
+      setIsSuccessModalOpen(true);
+      toast.success('Product Submitted for Review', 'Status is pending. The admin team will review your entry.');
+    } catch (err: any) {
+      toast.error('Submission Failed', err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <AppShell>
+      <div className="space-y-8 max-w-5xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+          <div>
+            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold mb-2">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Multi-Section Product Entry Form</span>
+            </div>
+            <h1 className="text-2xl font-black text-white tracking-tight">Create & List Product</h1>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Submit product details to Fitness Species catalog. Entries default to pending status for admin approval.
+            </p>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <Button
+              variant="outline"
+              onClick={() => setIsPreviewModalOpen(true)}
+              icon={<Eye className="w-4 h-4" />}
+            >
+              Preview Listing
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (validateForm()) setIsConfirmModalOpen(true);
+              }}
+              icon={<Send className="w-4 h-4" />}
+            >
+              Submit for Approval
+            </Button>
+          </div>
+        </div>
+
+        {/* 3D Visual Bar */}
+        <Card variant="glass" padding="sm" className="flex items-center justify-between overflow-hidden">
+          <div className="p-4 space-y-1">
+            <h3 className="text-sm font-extrabold text-white">Commercial Packaging & Details</h3>
+            <p className="text-xs text-slate-400">
+              Ensure high-res images and complete specifications for faster approval turnarounds.
+            </p>
+          </div>
+          <div className="w-44 shrink-0">
+            <ProductBoxScene />
+          </div>
+        </Card>
+
+        {/* SECTION 1: Basic Information */}
+        <Card variant="default" padding="lg" className="space-y-4">
+          <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">1</span>
+              Basic Information
+            </h3>
+            <span className="text-xs text-slate-400">Core details</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <Input
+                label="Product Name"
+                placeholder="NitroPure Iso-Whey Protein Isolate (Chocolate Fudge)"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                error={errors.name}
+                required
+              />
+            </div>
+
+            <Input
+              label="Brand Name"
+              placeholder="Apex Nutrition"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              required
+            />
+
+            <Input
+              label="SKU / Stock Keeping Unit"
+              placeholder="APX-WHEY-CHOCO-2KG"
+              value={sku}
+              onChange={(e) => setSku(e.target.value)}
+            />
+
+            <Select
+              label="Category (Strict Marketplace Allowed Categories)"
+              value={category}
+              onChange={(e) => setCategory(e.target.value as AllowedCategory)}
+              options={ALLOWED_CATEGORIES}
+              helperText="Note: Prescription medicines are strictly not allowed on the platform."
+            />
+
+            <Input
+              label="Subcategory"
+              placeholder="Whey Protein / Gym Accessories"
+              value={subCategory}
+              onChange={(e) => setSubCategory(e.target.value)}
+            />
+          </div>
+        </Card>
+
+        {/* SECTION 2: Description */}
+        <Card variant="default" padding="lg" className="space-y-4">
+          <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">2</span>
+              Product Description
+            </h3>
+          </div>
+
+          <Input
+            label="Short Summary Description"
+            placeholder="27g Protein Isolate per serving with digestive enzymes."
+            value={shortDescription}
+            onChange={(e) => setShortDescription(e.target.value)}
+          />
+
+          <Textarea
+            label="Full Product Overview & Benefits"
+            rows={5}
+            placeholder="Detailed product information, ingredients, usage instructions, and safety warnings..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </Card>
+
+        {/* SECTION 3: Pricing */}
+        <Card variant="default" padding="lg" className="space-y-4">
+          <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">3</span>
+              Pricing & Discounts
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Input
+              label="Selling Price (₹)"
+              type="number"
+              placeholder="2999"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              error={errors.price}
+              required
+            />
+
+            <Input
+              label="Compare-at Price (MRP ₹)"
+              type="number"
+              placeholder="3499"
+              value={compareAtPrice}
+              onChange={(e) => setCompareAtPrice(e.target.value)}
+            />
+
+            <div className="flex flex-col space-y-1.5 justify-center">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">Discount Calculated</span>
+              <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-emerald-400 font-bold text-sm">
+                {calculateDiscount()}% OFF
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* SECTION 4: Inventory */}
+        <Card variant="default" padding="lg" className="space-y-4">
+          <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">4</span>
+              Inventory & Stock
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Stock Quantity Available"
+              type="number"
+              placeholder="50"
+              value={stock}
+              onChange={(e) => setStock(e.target.value)}
+              error={errors.stock}
+              required
+            />
+
+            <Input
+              label="Low-Stock Alert Threshold"
+              type="number"
+              placeholder="10"
+              value={lowStockThreshold}
+              onChange={(e) => setLowStockThreshold(e.target.value)}
+            />
+          </div>
+        </Card>
+
+        {/* SECTION 5: Images */}
+        <Card variant="default" padding="lg" className="space-y-4">
+          <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">5</span>
+              Product Media & Images
+            </h3>
+            <span className="text-xs text-slate-400">Min 800x800px recommended</span>
+          </div>
+
+          {errors.images && <p className="text-xs text-rose-400 font-medium">{errors.images}</p>}
+
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <Input
+              placeholder="Paste HTTPS image URL (e.g. Unsplash, CDN)"
+              value={newImageUrl}
+              onChange={(e) => setNewImageUrl(e.target.value)}
+              className="flex-1"
+            />
+            <Button variant="secondary" onClick={addImageUrl} icon={<Plus className="w-4 h-4" />}>
+              Add Image URL
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
+            {imageUrls.map((url, idx) => (
+              <div key={idx} className="relative group rounded-xl bg-slate-950 border border-slate-800 overflow-hidden aspect-square">
+                <img src={url} alt={`Product ${idx}`} className="w-full h-full object-cover" />
+                {idx === 0 && (
+                  <span className="absolute top-2 left-2 bg-emerald-500 text-slate-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow">
+                    Primary
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeImage(idx)}
+                  className="absolute top-2 right-2 p-1.5 bg-rose-950/80 text-rose-300 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* SECTION 6: Variants */}
+        <Card variant="default" padding="lg" className="space-y-4">
+          <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">6</span>
+              Optional Variants (Size, Flavor, Color)
+            </h3>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <Input
+              placeholder="Variant Name (e.g. 2 kg - Chocolate Fudge)"
+              value={variantTitle}
+              onChange={(e) => setVariantTitle(e.target.value)}
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              placeholder="Stock"
+              value={variantStock}
+              onChange={(e) => setVariantStock(e.target.value)}
+              className="w-full sm:w-28"
+            />
+            <Button variant="secondary" onClick={addVariant} icon={<Plus className="w-4 h-4" />}>
+              Add Variant
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {variants.map((v) => (
+              <div key={v.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-white">{v.title}</p>
+                  <p className="text-[10px] text-slate-400">Stock: {v.stock} units</p>
+                </div>
+                <button
+                  onClick={() => removeVariant(v.id)}
+                  className="text-slate-500 hover:text-rose-400 p-1"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* SECTION 7: Specifications */}
+        <Card variant="default" padding="lg" className="space-y-4">
+          <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">7</span>
+              Technical Specifications
+            </h3>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <Input
+              placeholder="Spec Name (e.g. Serving Size)"
+              value={specKey}
+              onChange={(e) => setSpecKey(e.target.value)}
+              className="flex-1"
+            />
+            <Input
+              placeholder="Spec Value (e.g. 1 Scoop / 30g)"
+              value={specVal}
+              onChange={(e) => setSpecVal(e.target.value)}
+              className="flex-1"
+            />
+            <Button variant="secondary" onClick={addSpec} icon={<Plus className="w-4 h-4" />}>
+              Add Spec
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {specs.map((s, idx) => (
+              <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">{s.key}</p>
+                  <p className="text-xs font-semibold text-white">{s.value}</p>
+                </div>
+                <button onClick={() => removeSpec(idx)} className="text-slate-500 hover:text-rose-400 p-1">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Bottom Form Action Buttons */}
+        <div className="flex items-center justify-end space-x-4 pt-4 border-t border-slate-800">
+          <Button variant="outline" onClick={() => router.push('/products')}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => {
+              if (validateForm()) setIsConfirmModalOpen(true);
+            }}
+            icon={<Send className="w-4 h-4" />}
+          >
+            Submit for Admin Review
+          </Button>
+        </div>
+      </div>
+
+      {/* CUSTOMER PREVIEW MODAL */}
+      <Modal isOpen={isPreviewModalOpen} onClose={() => setIsPreviewModalOpen(false)} maxWidth="2xl" title="Live Customer Marketplace Preview">
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row gap-6">
+            <div className="w-full md:w-1/2 aspect-square rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden">
+              <img src={imageUrls[0] || 'https://images.unsplash.com/photo-1579722821273-0f6c7d44362f?auto=format&fit=crop&w=800&q=80'} alt="Preview" className="w-full h-full object-cover" />
+            </div>
+
+            <div className="w-full md:w-1/2 space-y-3">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full">
+                {category}
+              </span>
+              <h3 className="text-lg font-bold text-white leading-snug">{name || 'Product Title Preview'}</h3>
+              <p className="text-xs text-slate-400">{brand || 'Brand'}</p>
+
+              <div className="flex items-baseline space-x-3">
+                <span className="text-2xl font-black text-emerald-400">₹{parseFloat(price || '0').toLocaleString('en-IN')}</span>
+                {compareAtPrice && <span className="text-xs text-slate-500 line-through">₹{parseFloat(compareAtPrice).toLocaleString('en-IN')}</span>}
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed">{shortDescription || 'Short description preview will appear here.'}</p>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* CONFIRMATION SUBMISSION DIALOG */}
+      <ConfirmDialog
+        isOpen={isConfirmModalOpen}
+        onClose={() => setIsConfirmModalOpen(false)}
+        onConfirm={handleSubmitConfirmed}
+        title="Submit Product for Admin Review?"
+        message="Your product will be submitted with status set to pending. The Fitness Species admin team will verify specifications and photos before making it visible on the live marketplace app."
+        confirmText="Confirm & Submit"
+        isLoading={isSubmitting}
+      />
+
+      {/* SUCCESS CELEBRATION MODAL */}
+      <Modal isOpen={isSuccessModalOpen} onClose={() => { setIsSuccessModalOpen(false); router.push('/products'); }} maxWidth="md">
+        <div className="flex flex-col items-center text-center space-y-4 pt-2">
+          <SuccessBadgeScene />
+          <h3 className="text-xl font-extrabold text-white">Product Submitted Successfully!</h3>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Your product entry is now <strong className="text-amber-400">Pending Review</strong>. You can track its approval status anytime from your products dashboard.
+          </p>
+          <Button variant="primary" className="w-full mt-4" onClick={() => { setIsSuccessModalOpen(false); router.push('/products'); }}>
+            Back to My Products
+          </Button>
+        </div>
+      </Modal>
+    </AppShell>
+  );
+}
