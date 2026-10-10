@@ -9,10 +9,6 @@ import {
   User,
   LogOut,
   ChevronDown,
-  ShieldCheck,
-  CheckCircle2,
-  Clock,
-  XCircle,
   HelpCircle,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -34,33 +30,6 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
       router.push(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
     }
   };
-
-  const notifications = [
-    {
-      id: '1',
-      title: 'Product Review Submitted',
-      desc: 'High-Protein Crunch Energy Bar submitted for review.',
-      time: '10 mins ago',
-      icon: Clock,
-      color: 'text-amber-400 bg-amber-500/10',
-    },
-    {
-      id: '2',
-      title: 'Store Verification Active',
-      desc: 'Apex Performance Nutrition seller account is active.',
-      time: '1 hour ago',
-      icon: ShieldCheck,
-      color: 'text-emerald-400 bg-emerald-500/10',
-    },
-    {
-      id: '3',
-      title: 'Image Guideline Note',
-      desc: 'Remember to upload high resolution 800x800px product photos.',
-      time: 'Yesterday',
-      icon: CheckCircle2,
-      color: 'text-cyan-400 bg-cyan-500/10',
-    },
-  ];
 
   const profileMenuItems = [
     {
@@ -128,22 +97,8 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
                   3 New
                 </span>
               </div>
-              <div className="divide-y divide-slate-800/60 max-h-72 overflow-y-auto">
-                {notifications.map((n) => {
-                  const Icon = n.icon;
-                  return (
-                    <div key={n.id} className="p-3.5 hover:bg-slate-800/50 transition-colors flex space-x-3">
-                      <div className={`w-8 h-8 rounded-lg ${n.color} flex items-center justify-center shrink-0`}>
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-white leading-snug">{n.title}</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">{n.desc}</p>
-                        <p className="text-[9px] text-slate-500 mt-1">{n.time}</p>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="p-4 text-xs text-slate-400">
+                Notifications are unavailable until seller activity is connected.
               </div>
             </div>
           )}
@@ -163,7 +118,7 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
                   {user?.displayName || 'Seller Account'}
                 </p>
                 <p className="text-[10px] text-slate-400 leading-tight">
-                  {sellerProfile?.businessName || 'Apex Performance'}
+                  {sellerProfile?.businessName || 'Seller profile unavailable'}
                 </p>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-transform" />

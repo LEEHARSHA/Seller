@@ -7,7 +7,7 @@ import { PackageSearch, Home } from 'lucide-react';
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-[#090d16] flex items-center justify-center p-6 text-center">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center">
       <div className="max-w-md space-y-6">
         <div className="w-20 h-20 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400 mx-auto shadow-2xl">
           <PackageSearch className="w-10 h-10" />

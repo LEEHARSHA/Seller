@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppShell } from '../../components/layout/AppShell';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -12,17 +12,28 @@ import { updateSellerProfileApi } from '../../lib/api/seller';
 import { User, Store, Phone, Mail, MapPin, ShieldCheck, Save, Building } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { sellerProfile, user, refreshProfile } = useAuth();
+  const { sellerProfile, user, refreshProfile, authError } = useAuth();
   const toast = useToast();
 
-  const [businessName, setBusinessName] = useState(sellerProfile?.businessName || 'Apex Performance Nutrition');
-  const [ownerName, setOwnerName] = useState(sellerProfile?.ownerName || 'Alex Rivera');
-  const [phone, setPhone] = useState(sellerProfile?.phone || '+91 98765 43210');
-  const [address, setAddress] = useState(sellerProfile?.businessAddress?.address || 'Suite 402, High-Tech Commercial Hub');
-  const [city, setCity] = useState(sellerProfile?.businessAddress?.city || 'Mumbai');
-  const [state, setState] = useState(sellerProfile?.businessAddress?.state || 'Maharashtra');
-  const [postalCode, setPostalCode] = useState(sellerProfile?.businessAddress?.postalCode || '400050');
+  const [businessName, setBusinessName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [postalCode, setPostalCode] = useState('');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!sellerProfile) return;
+    setBusinessName(sellerProfile.businessName);
+    setOwnerName(sellerProfile.ownerName);
+    setPhone(sellerProfile.phone);
+    setAddress(sellerProfile.businessAddress?.address || '');
+    setCity(sellerProfile.businessAddress?.city || '');
+    setState(sellerProfile.businessAddress?.state || '');
+    setPostalCode(sellerProfile.businessAddress?.postalCode || '');
+  }, [sellerProfile]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,9 +70,19 @@ export default function ProfilePage() {
               <h1 className="text-2xl font-black text-white tracking-tight">Seller Profile</h1>
               <p className="text-xs text-slate-400 mt-1">Manage your commercial business profile and contact address.</p>
             </div>
-            <Badge status={sellerProfile?.status || 'approved'} size="md" />
+            {sellerProfile ? (
+              <Badge status={sellerProfile.status} size="md" />
+            ) : (
+              <Badge status="neutral" size="md">Profile setup required</Badge>
+            )}
           </div>
         </div>
+
+        {authError && (
+          <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/30 text-xs text-amber-200">
+            {authError}
+          </div>
+        )}
 
         {/* Profile Card Form */}
         <form onSubmit={handleSaveProfile} className="space-y-6">
@@ -98,7 +119,7 @@ export default function ProfilePage() {
 
               <Input
                 label="Account Email (System Immutable)"
-                value={user?.email || sellerProfile?.email || 'alex@apexnutrition.com'}
+                value={user?.email || sellerProfile?.email || ''}
                 disabled
                 icon={<Mail className="w-4 h-4" />}
                 helperText="Email is managed via Firebase Auth security."
@@ -129,9 +150,9 @@ export default function ProfilePage() {
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs text-slate-400">
             <div className="flex items-center space-x-2">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Verified Seller Role: <strong>{sellerProfile?.status || 'Active'}</strong></span>
+              <span>Seller profile: <strong>{sellerProfile?.status || 'Setup required'}</strong></span>
             </div>
-            <span className="text-[10px] text-slate-500 font-mono">UID: {user?.uid || 'demo_uid'}</span>
+            <span className="text-[10px] text-slate-500 font-mono">UID: {user?.uid || 'Unavailable'}</span>
           </div>
 
           <div className="flex justify-end">

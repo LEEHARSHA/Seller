@@ -8,31 +8,22 @@ export interface RequestOptions extends RequestInit {
 }
 
 export async function getAuthToken(): Promise<string | null> {
-  try {
-    const user = auth.currentUser;
-    if (user) {
-      return await user.getIdToken();
-    }
-  } catch (err) {
-    console.warn('Could not fetch Firebase ID Token:', err);
-  }
-  return null;
+  const user = auth.currentUser;
+  if (!user) return null;
+  return await user.getIdToken();
 }
 
 export async function fetchApi<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { token: providedToken, headers = {}, ...customOptions } = options;
 
-  let token = providedToken;
-  if (!token) {
-    token = (await getAuthToken()) || undefined;
-  }
+  const token = providedToken || (await getAuthToken()) || undefined;
 
   const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
   };
 
   if (token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
+    defaultHeaders.Authorization = `Bearer ${token}`;
   }
 
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
@@ -46,23 +37,28 @@ export async function fetchApi<T>(endpoint: string, options: RequestOptions = {}
       },
     });
 
-    const data = await response.json().catch(() => null);
+    let data: any = null;
+    try {
+      data = await response.json();
+    } catch {
+      data = null;
+    }
 
     if (!response.ok) {
-      const errorMessage = data?.message || `HTTP Error ${response.status}: ${response.statusText}`;
-      const error: any = new Error(errorMessage);
+      const message = data?.message || data?.error || `Request failed with status ${response.status}.`;
+      const error: any = new Error(message);
       error.status = response.status;
       error.data = data;
       throw error;
     }
 
-    return data as T;
+    return (data ?? (null as T)) as T;
   } catch (error: any) {
-    // Re-throw with user-friendly message
-    if (error.status) throw error;
+    if (error?.status) {
+      throw error;
+    }
 
-    // Network / offline error
-    const netError: any = new Error('Unable to connect to Fitness Species servers. Please check your connection.');
+    const netError: any = new Error('Unable to connect to the Fitness Species backend. Please check your connection and try again.');
     netError.isNetworkError = true;
     throw netError;
   }

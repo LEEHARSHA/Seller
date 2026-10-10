@@ -40,15 +40,18 @@ export default function DashboardPage() {
   const { user, sellerProfile } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [productsError, setProductsError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
       setLoading(true);
+      setProductsError(null);
       try {
         const data = await getSellerProductsApi('all');
         setProducts(data);
       } catch (err) {
         console.warn('Dashboard data fetch error:', err);
+        setProductsError(err instanceof Error ? err.message : 'Unable to load seller products.');
       } finally {
         setLoading(false);
       }
@@ -165,8 +168,11 @@ export default function DashboardPage() {
                 </span>
               </h2>
               <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
-                Here is what is happening with{' '}
-                <strong className="text-slate-200">{sellerProfile?.businessName || 'Apex Performance Nutrition'}</strong>. Manage inventory, monitor approvals, and submit new product lines.
+                {sellerProfile ? (
+                  <>Here is what is happening with <strong className="text-slate-200">{sellerProfile.businessName}</strong>. Manage inventory, monitor approvals, and submit new product lines.</>
+                ) : (
+                  <>Seller profile setup is required before your business details can be displayed.</>
+                )}
               </p>
               <div className="pt-2 flex flex-wrap items-center gap-3">
                 <Button
@@ -192,6 +198,12 @@ export default function DashboardPage() {
             </div>
           </div>
         </Card>
+
+      {productsError && (
+        <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-500/30 text-xs text-rose-200">
+          Product data is unavailable: {productsError}
+        </div>
+      )}
 
         {/* Statistics Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

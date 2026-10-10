@@ -174,10 +174,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <p className="text-xs font-bold text-white truncate">
                 {sellerProfile?.businessName || 'Fitness Seller'}
               </p>
-              <p className="text-[10px] text-slate-400 truncate">{sellerProfile?.ownerName || 'Verified Store'}</p>
+              <p className="text-[10px] text-slate-400 truncate">{sellerProfile?.ownerName || 'Seller profile unavailable'}</p>
             </div>
           </div>
-          <Badge status={sellerProfile?.status || 'approved'} size="sm" pulse={false} />
+          {sellerProfile ? (
+            <Badge status={sellerProfile.status} size="sm" pulse={false} />
+          ) : (
+            <Badge status="neutral" size="sm" pulse={false}>Not set up</Badge>
+          )}
         </div>
       </div>
     </aside>

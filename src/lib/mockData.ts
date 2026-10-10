@@ -1,24 +1,4 @@
-import { Product, SellerProfile } from '../types';
-
-export const INITIAL_MOCK_SELLER: SellerProfile = {
-  id: 'seller_fs_901',
-  firebaseUid: 'demo_seller_uid_901',
-  businessName: 'Apex Performance Nutrition',
-  ownerName: 'Alex Rivera',
-  email: 'alex@apexnutrition.com',
-  phone: '+91 98765 43210',
-  businessAddress: {
-    address: 'Suite 402, High-Tech Commercial Hub, Bandra West',
-    city: 'Mumbai',
-    state: 'Maharashtra',
-    country: 'India',
-    postalCode: '400050',
-  },
-  status: 'approved',
-  createdAt: '2026-01-15T09:00:00.000Z',
-  updatedAt: '2026-09-20T14:30:00.000Z',
-  approvedAt: '2026-01-16T11:20:00.000Z',
-};
+import { Product } from '../types';
 
 export const INITIAL_MOCK_PRODUCTS: Product[] = [
   {

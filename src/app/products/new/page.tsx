@@ -47,7 +47,7 @@ export default function NewProductPage() {
 
   // Section 1: Basic Info
   const [name, setName] = useState('');
-  const [brand, setBrand] = useState('Apex Nutrition');
+  const [brand, setBrand] = useState('');
   const [sku, setSku] = useState(`APX-${Math.floor(1000 + Math.random() * 9000)}`);
   const [category, setCategory] = useState<AllowedCategory>('Supplements');
   const [subCategory, setSubCategory] = useState('Whey Protein');
@@ -265,7 +265,7 @@ export default function NewProductPage() {
 
             <Input
               label="Brand Name"
-              placeholder="Apex Nutrition"
+              placeholder="Brand name"
               value={brand}
               onChange={(e) => setBrand(e.target.value)}
               required

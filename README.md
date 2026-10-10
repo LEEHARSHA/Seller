@@ -1,6 +1,6 @@
 # Fitness Species Commercial Seller Portal
 
-Official commercial seller portal for the **Fitness Species** marketplace (`https://sellers.alk.co.in`).
+Official commercial seller portal for the **Fitness Species** marketplace (`https://seller-lilac-five.vercel.app`).
 
 ## Tech Stack
 - **Framework**: Next.js 14 (App Router)
@@ -13,18 +13,18 @@ Official commercial seller portal for the **Fitness Species** marketplace (`http
 
 ---
 
-## Domain Configuration (`sellers.alk.co.in`)
-The production seller web portal is configured for deployment at `https://sellers.alk.co.in`.
+## Domain Configuration (`seller-lilac-five.vercel.app`)
+The production seller web portal is configured for deployment at `https://seller-lilac-five.vercel.app`.
 
 ### Environment Variables (.env.local)
 ```env
 NEXT_PUBLIC_API_URL=https://api.alk.co.in
-NEXT_PUBLIC_SELLER_DOMAIN=https://sellers.alk.co.in
+NEXT_PUBLIC_SELLER_DOMAIN=https://seller-lilac-five.vercel.app
 
 NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSy...
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=fitness-species.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=fitness-species
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=fitness-species.appspot.com
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=sellerportal-2786c.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=sellerportal-2786c
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=sellerportal-2786c.firebasestorage.app
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
 NEXT_PUBLIC_FIREBASE_APP_ID=...
 ```

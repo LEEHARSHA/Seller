@@ -1,19 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../../lib/firebase';
 import { updateSellerProfileApi } from '../../lib/api/seller';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Drawer } from '../../components/ui/Drawer';
 import { Card } from '../../components/ui/Card';
-import { Flame, ShieldCheck, TrendingUp, Sparkles, CheckCircle2, Lock, Mail, ArrowRight } from 'lucide-react';
+import { Flame, ShieldCheck, TrendingUp, Sparkles, CheckCircle2, Lock, Mail, Chrome } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-// Dynamic 3D Scene lazy loading
 const HeroDumbbellScene = dynamic(() => import('../../components/3d/HeroDumbbellScene'), {
   ssr: false,
   loading: () => (
@@ -25,15 +24,16 @@ const HeroDumbbellScene = dynamic(() => import('../../components/3d/HeroDumbbell
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setDemoUser } = useAuth();
+  const { authState, loading: authLoading, authError, refreshProfile } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Apply as Seller Drawer state
   const [isApplyDrawerOpen, setIsApplyDrawerOpen] = useState(false);
+  const [applyEmail, setApplyEmail] = useState('');
+  const [applyPassword, setApplyPassword] = useState('');
   const [applyBusinessName, setApplyBusinessName] = useState('');
   const [applyOwnerName, setApplyOwnerName] = useState('');
   const [applyPhone, setApplyPhone] = useState('');
@@ -41,7 +41,14 @@ export default function LoginPage() {
   const [applyCity, setApplyCity] = useState('');
   const [applyState, setApplyState] = useState('');
   const [applySubmitting, setApplySubmitting] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
   const [applySuccessMessage, setApplySuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!authLoading && authState === 'signed-in' && !isApplyDrawerOpen) {
+      router.replace('/dashboard');
+    }
+  }, [authState, authLoading, isApplyDrawerOpen, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,35 +63,47 @@ export default function LoginPage() {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push('/dashboard');
     } catch (err: any) {
-      console.warn('Firebase authentication error:', err.message);
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-        setError('Invalid email or password. Please verify your credentials or sign in with demo mode.');
+      if (err?.code === 'auth/invalid-credential' || err?.code === 'auth/user-not-found' || err?.code === 'auth/wrong-password') {
+        setError('Invalid email or password. Please try again.');
       } else {
-        // Fallback demo authentication for evaluation
-        setDemoUser('seller');
-        router.push('/dashboard');
+        setError('Unable to sign in right now. Please try again in a moment.');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDemoSignIn = () => {
-    setDemoUser('seller');
-    router.push('/dashboard');
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err: any) {
+      setError(err?.code === 'auth/popup-closed-by-user'
+        ? 'Google sign-in was cancelled.'
+        : 'Unable to sign in with Google right now. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleApplySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!applyBusinessName || !applyPhone) {
-      setError('Business name and contact phone are required.');
+    setApplyError(null);
+    if (!applyEmail || !applyPassword || !applyBusinessName || !applyPhone) {
+      setApplyError('Email, password, business name, and contact phone are required.');
       return;
     }
 
     setApplySubmitting(true);
+    let accountCreated = false;
+    let applicationSubmitted = false;
     try {
+      if (auth.currentUser?.email?.toLowerCase() !== applyEmail.toLowerCase()) {
+        await createUserWithEmailAndPassword(auth, applyEmail, applyPassword);
+        accountCreated = true;
+      }
       await updateSellerProfileApi({
         businessName: applyBusinessName,
         ownerName: applyOwnerName,
@@ -96,23 +115,34 @@ export default function LoginPage() {
           country: 'India',
         },
       });
+      applicationSubmitted = true;
+      await refreshProfile();
       setApplySuccessMessage('Application submitted successfully! Our team will review your store details.');
       setTimeout(() => {
         setIsApplyDrawerOpen(false);
         setApplySuccessMessage(null);
-        handleDemoSignIn();
       }, 2000);
     } catch (err: any) {
-      setError('Failed to submit seller application. Please try again.');
+      if (applicationSubmitted) {
+        setApplyError('Your seller application was submitted, but your profile could not be refreshed. Please reload the portal.');
+      } else if (err?.code === 'auth/email-already-in-use') {
+        setApplyError('An account already exists for this email. Sign in first, then submit your seller profile.');
+      } else if (accountCreated) {
+        setApplyError('Your Firebase account was created, but the seller application could not be submitted. Sign in and try again from Seller Profile.');
+      } else if (err?.code === 'auth/weak-password') {
+        setApplyError('Choose a password with at least 6 characters.');
+      } else {
+        setApplyError('Unable to create your Firebase account. Please check your details and try again.');
+      }
     } finally {
       setApplySubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col lg:flex-row">
       {/* LEFT HERO AREA */}
-      <div className="lg:w-7/12 p-8 lg:p-16 flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-slate-950 via-[#090d16] to-slate-900 border-r border-slate-800/80">
+      <div className="lg:w-7/12 p-8 lg:p-16 flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-950 to-slate-900 border-r border-slate-800/80">
         {/* Glow Effects */}
         <div className="absolute -top-32 -left-32 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -177,12 +207,12 @@ export default function LoginPage() {
         {/* Footer info */}
         <div className="relative z-10 text-xs text-slate-500 flex items-center justify-between">
           <p>&copy; {new Date().getFullYear()} Fitness Species Marketplace Inc.</p>
-          <span className="text-[11px] font-mono text-slate-400">sellers.alk.co.in</span>
+          <span className="text-[11px] font-mono text-slate-400">seller-lilac-five.vercel.app</span>
         </div>
       </div>
 
       {/* RIGHT LOGIN FORM */}
-      <div className="lg:w-5/12 p-8 lg:p-16 flex items-center justify-center bg-[#090d16] relative">
+      <div className="lg:w-5/12 p-8 lg:p-16 flex items-center justify-center bg-slate-950 relative">
         <div className="w-full max-w-md">
           <Card variant="glass" padding="lg" className="border-slate-800 shadow-2xl">
             <div className="mb-6">
@@ -192,10 +222,10 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {error && (
+            {(error || authError) && (
               <div className="mb-5 p-3.5 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs flex items-start space-x-2.5">
                 <span className="shrink-0 text-rose-400 font-bold">!</span>
-                <span>{error}</span>
+                <span>{error || authError}</span>
               </div>
             )}
 
@@ -239,7 +269,7 @@ export default function LoginPage() {
                   <div className="w-full border-t border-slate-800" />
                 </div>
                 <span className="relative bg-slate-900 px-3 text-[10px] uppercase font-bold text-slate-500">
-                  Quick Access Demo
+                  Google Sign In
                 </span>
               </div>
 
@@ -248,10 +278,11 @@ export default function LoginPage() {
                 variant="secondary"
                 size="md"
                 className="w-full text-xs font-semibold"
-                onClick={handleDemoSignIn}
-                icon={<ArrowRight className="w-4 h-4 text-emerald-400" />}
+                onClick={handleGoogleSignIn}
+                isLoading={loading}
+                icon={<Chrome className="w-4 h-4 text-emerald-400" />}
               >
-                Instant Seller Demo Login
+                Continue with Google
               </Button>
             </form>
 
@@ -288,9 +319,34 @@ export default function LoginPage() {
             </div>
           ) : (
             <form onSubmit={handleApplySubmit} className="space-y-4 pt-2">
+              {applyError && (
+                <div className="p-3.5 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs">
+                  {applyError}
+                </div>
+              )}
+
+              <Input
+                label="Account Email Address"
+                type="email"
+                placeholder="seller@yourbrand.com"
+                value={applyEmail}
+                onChange={(e) => setApplyEmail(e.target.value)}
+                required
+              />
+
+              <Input
+                label="Password"
+                type="password"
+                placeholder="At least 6 characters"
+                value={applyPassword}
+                onChange={(e) => setApplyPassword(e.target.value)}
+                minLength={6}
+                required
+              />
+
               <Input
                 label="Business / Store Name"
-                placeholder="Apex Performance Nutrition"
+                placeholder="Your business name"
                 value={applyBusinessName}
                 onChange={(e) => setApplyBusinessName(e.target.value)}
                 required
@@ -298,7 +354,7 @@ export default function LoginPage() {
 
               <Input
                 label="Owner / Contact Person"
-                placeholder="Alex Rivera"
+                placeholder="Your name"
                 value={applyOwnerName}
                 onChange={(e) => setApplyOwnerName(e.target.value)}
                 required

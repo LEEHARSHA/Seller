@@ -99,8 +99,8 @@ export interface AuthUser {
   email: string | null;
   displayName: string | null;
   photoURL?: string | null;
-  role: UserRole;
-  isSeller: boolean;
+  role?: UserRole;
+  isSeller?: boolean;
   token?: string;
 }
 
