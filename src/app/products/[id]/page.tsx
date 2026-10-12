@@ -29,17 +29,20 @@ export default function ProductDetailPage() {
 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   useEffect(() => {
     async function loadProduct() {
       if (!productId) return;
       setLoading(true);
+      setLoadError(null);
       try {
         const item = await getSellerProductByIdApi(productId);
         setProduct(item);
       } catch (err) {
-        console.warn('Error loading product:', err);
+        setProduct(null);
+        setLoadError(err instanceof Error ? err.message : 'Unable to load product.');
       } finally {
         setLoading(false);
       }
@@ -63,8 +66,10 @@ export default function ProductDetailPage() {
       <AppShell>
         <div className="text-center py-16 space-y-4">
           <Package className="w-12 h-12 text-slate-500 mx-auto" />
-          <h2 className="text-xl font-bold text-white">Product Not Found</h2>
-          <p className="text-xs text-slate-400">This product record does not exist or has been removed.</p>
+          <h2 className="text-xl font-bold text-white">{loadError ? 'Product Unavailable' : 'Product Not Found'}</h2>
+          <p className="text-xs text-slate-400">
+            {loadError || 'This product record does not exist or has been removed.'}
+          </p>
           <Button variant="primary" onClick={() => router.push('/products')}>
             Back to Products
           </Button>
@@ -73,9 +78,9 @@ export default function ProductDetailPage() {
     );
   }
 
-  const images = Array.isArray(product.images) && product.images.length > 0
+  const images = Array.isArray(product.images)
     ? product.images.map((img) => (typeof img === 'string' ? img : img.url))
-    : ['https://images.unsplash.com/photo-1579722821273-0f6c7d44362f?auto=format&fit=crop&w=800&q=80'];
+    : [];
 
   return (
     <AppShell>
@@ -139,7 +144,13 @@ export default function ProductDetailPage() {
           {/* Gallery */}
           <div className="space-y-4">
             <div className="aspect-square rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden">
-              <img src={images[selectedImageIndex]} alt={product.name} className="w-full h-full object-cover" />
+              {images[selectedImageIndex] ? (
+                <img src={images[selectedImageIndex]} alt={product.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="flex h-full items-center justify-center text-slate-500">
+                  <Package className="h-12 w-12" />
+                </div>
+              )}
             </div>
 
             {images.length > 1 && (

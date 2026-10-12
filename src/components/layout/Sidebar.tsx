@@ -36,9 +36,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   ];
 
   const comingSoonNav = [
-    { label: 'Orders', href: '#', icon: ShoppingBag, badge: 'Phase 2' },
-    { label: 'Inventory', href: '#', icon: Boxes, badge: 'Phase 2' },
-    { label: 'Analytics', href: '#', icon: BarChart3, badge: 'Phase 2' },
+    { label: 'Inventory', href: '/inventory', icon: Boxes },
+    { label: 'Analytics', href: '/analytics', icon: BarChart3 },
   ];
 
   const accountNav = [
@@ -106,28 +105,44 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
 
-          {/* Marketplace Capabilities (Upcoming Phase 2) */}
+          {/* Seller commercial tools */}
           <div>
             <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
               Commercial Tools
             </p>
             <div className="space-y-1">
-              {comingSoonNav.map((item, idx) => {
+              <div
+                className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-500 opacity-60 cursor-not-allowed"
+                title="Orders require an order data model and seller-scoped backend endpoints."
+                aria-disabled="true"
+              >
+                <div className="flex items-center space-x-3">
+                  <ShoppingBag className="w-4 h-4 text-slate-500" />
+                  <span>Orders</span>
+                </div>
+                <span className="text-[9px] font-semibold bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700">
+                  Backend required
+                </span>
+              </div>
+              {comingSoonNav.map((item) => {
                 const Icon = item.icon;
+                const isActive = pathname === item.href;
                 return (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-500 opacity-60 cursor-not-allowed"
-                    title="Feature planned for Backend Phase 2 release"
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onClose}
+                    className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
+                      isActive
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                    }`}
                   >
                     <div className="flex items-center space-x-3">
-                      <Icon className="w-4 h-4 text-slate-500" />
+                      <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
                       <span>{item.label}</span>
                     </div>
-                    <span className="text-[9px] font-semibold bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700">
-                      {item.badge}
-                    </span>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
@@ -174,7 +189,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <p className="text-xs font-bold text-white truncate">
                 {sellerProfile?.businessName || 'Fitness Seller'}
               </p>
-              <p className="text-[10px] text-slate-400 truncate">{sellerProfile?.ownerName || 'Seller profile unavailable'}</p>
+              <p className="text-[10px] text-slate-400 truncate">{sellerProfile?.ownerName || 'Complete seller profile'}</p>
             </div>
           </div>
           {sellerProfile ? (

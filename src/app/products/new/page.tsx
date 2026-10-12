@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '../../../components/layout/AppShell';
@@ -12,8 +12,9 @@ import { Textarea } from '../../../components/ui/Textarea';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import { Modal } from '../../../components/ui/Modal';
 import { useToast } from '../../../context/ToastContext';
+import { useAuth } from '../../../context/AuthContext';
 import { createSellerProductApi } from '../../../lib/api/products';
-import { ALLOWED_CATEGORIES, AllowedCategory } from '../../../types';
+import { ALLOWED_CATEGORIES, AllowedCategory, Product } from '../../../types';
 import {
   Upload,
   Image as ImageIcon,
@@ -44,46 +45,38 @@ const SuccessBadgeScene = dynamic(() => import('../../../components/3d/SuccessBa
 export default function NewProductPage() {
   const router = useRouter();
   const toast = useToast();
+  const { firebaseUser } = useAuth();
 
   // Section 1: Basic Info
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
-  const [sku, setSku] = useState(`APX-${Math.floor(1000 + Math.random() * 9000)}`);
+  const [sku, setSku] = useState('');
   const [category, setCategory] = useState<AllowedCategory>('Supplements');
-  const [subCategory, setSubCategory] = useState('Whey Protein');
+  const [subCategory, setSubCategory] = useState('');
 
   // Section 2: Description
   const [description, setDescription] = useState('');
   const [shortDescription, setShortDescription] = useState('');
 
   // Section 3: Pricing
-  const [price, setPrice] = useState<string>('2999');
-  const [compareAtPrice, setCompareAtPrice] = useState<string>('3499');
+  const [price, setPrice] = useState<string>('');
+  const [compareAtPrice, setCompareAtPrice] = useState<string>('');
 
   // Section 4: Inventory
-  const [stock, setStock] = useState<string>('50');
+  const [stock, setStock] = useState<string>('');
   const [lowStockThreshold, setLowStockThreshold] = useState<string>('10');
 
   // Section 5: Images
-  const [imageUrls, setImageUrls] = useState<string[]>([
-    'https://images.unsplash.com/photo-1579722821273-0f6c7d44362f?auto=format&fit=crop&w=800&q=80',
-    'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?auto=format&fit=crop&w=800&q=80',
-  ]);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [newImageUrl, setNewImageUrl] = useState('');
 
   // Section 6: Variants
-  const [variants, setVariants] = useState<Array<{ id: string; title: string; stock: number }>>([
-    { id: '1', title: '1 kg - Chocolate', stock: 25 },
-    { id: '2', title: '2 kg - Vanilla', stock: 25 },
-  ]);
+  const [variants, setVariants] = useState<Array<{ id: string; title: string; stock: number }>>([]);
   const [variantTitle, setVariantTitle] = useState('');
-  const [variantStock, setVariantStock] = useState('10');
+  const [variantStock, setVariantStock] = useState('');
 
   // Section 7: Specifications
-  const [specs, setSpecs] = useState<Array<{ key: string; value: string }>>([
-    { key: 'Serving Size', value: '1 Scoop (30g)' },
-    { key: 'Protein Content', value: '25g per serving' },
-  ]);
+  const [specs, setSpecs] = useState<Array<{ key: string; value: string }>>([]);
   const [specKey, setSpecKey] = useState('');
   const [specVal, setSpecVal] = useState('');
 
@@ -93,6 +86,8 @@ export default function NewProductPage() {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submittedProduct, setSubmittedProduct] = useState<Product | null>(null);
+  const submissionInProgress = useRef(false);
 
   const calculateDiscount = () => {
     const p = parseFloat(price);
@@ -143,23 +138,39 @@ export default function NewProductPage() {
   const validateForm = () => {
     const errs: Record<string, string> = {};
     if (!name.trim()) errs.name = 'Product name is required.';
+    if (!brand.trim()) errs.brand = 'Brand name is required.';
     if (!category) errs.category = 'Category is required.';
-    if (!price || parseFloat(price) <= 0) errs.price = 'Valid price is required.';
-    if (!stock || parseInt(stock) < 0) errs.stock = 'Valid stock quantity is required.';
+    if (!price || !Number.isFinite(Number(price)) || Number(price) <= 0) errs.price = 'Valid price is required.';
+    if (!stock || !Number.isInteger(Number(stock)) || Number(stock) < 0) errs.stock = 'Valid stock quantity is required.';
+    if (!Number.isInteger(Number(lowStockThreshold)) || Number(lowStockThreshold) < 0) {
+      errs.lowStockThreshold = 'Low-stock threshold must be a non-negative whole number.';
+    }
     if (imageUrls.length === 0) errs.images = 'At least one product image is required.';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
   const handleSubmitConfirmed = async () => {
+    if (submissionInProgress.current) return;
+    if (!validateForm()) {
+      toast.error('Product details need attention', 'Complete the required fields and submit again.');
+      return;
+    }
+    if (!firebaseUser) {
+      toast.error('Sign-in required', 'Sign in again before submitting this product.');
+      return;
+    }
+
+    submissionInProgress.current = true;
     setIsSubmitting(true);
     try {
+      const token = await firebaseUser.getIdToken(true);
       const specObj: Record<string, string> = {};
       specs.forEach((s) => {
         specObj[s.key] = s.value;
       });
 
-      await createSellerProductApi({
+      const createdProduct = await createSellerProductApi({
         name,
         brand,
         sku,
@@ -180,14 +191,23 @@ export default function NewProductPage() {
           attributes: {},
         })),
         specifications: specObj,
-      });
+      }, token);
 
+      if (!createdProduct.status) {
+        throw new Error('The backend did not confirm the product status.');
+      }
+      setSubmittedProduct(createdProduct);
       setIsConfirmModalOpen(false);
       setIsSuccessModalOpen(true);
-      toast.success('Product Submitted for Review', 'Status is pending. The admin team will review your entry.');
-    } catch (err: any) {
-      toast.error('Submission Failed', err.message);
+      toast.success(
+        'Product submitted',
+        `The backend returned status: ${createdProduct.status}.`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'The product could not be submitted.';
+      toast.error('Submission Failed', message);
     } finally {
+      submissionInProgress.current = false;
       setIsSubmitting(false);
     }
   };
@@ -255,7 +275,7 @@ export default function NewProductPage() {
             <div className="md:col-span-2">
               <Input
                 label="Product Name"
-                placeholder="NitroPure Iso-Whey Protein Isolate (Chocolate Fudge)"
+                placeholder="Product name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 error={errors.name}
@@ -268,12 +288,13 @@ export default function NewProductPage() {
               placeholder="Brand name"
               value={brand}
               onChange={(e) => setBrand(e.target.value)}
+              error={errors.brand}
               required
             />
 
             <Input
               label="SKU / Stock Keeping Unit"
-              placeholder="APX-WHEY-CHOCO-2KG"
+              placeholder="SKU-12345"
               value={sku}
               onChange={(e) => setSku(e.target.value)}
             />
@@ -288,7 +309,7 @@ export default function NewProductPage() {
 
             <Input
               label="Subcategory"
-              placeholder="Whey Protein / Gym Accessories"
+              placeholder="Product subcategory"
               value={subCategory}
               onChange={(e) => setSubCategory(e.target.value)}
             />
@@ -333,7 +354,7 @@ export default function NewProductPage() {
             <Input
               label="Selling Price (₹)"
               type="number"
-              placeholder="2999"
+              placeholder="0.00"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               error={errors.price}
@@ -343,7 +364,7 @@ export default function NewProductPage() {
             <Input
               label="Compare-at Price (MRP ₹)"
               type="number"
-              placeholder="3499"
+              placeholder="0.00"
               value={compareAtPrice}
               onChange={(e) => setCompareAtPrice(e.target.value)}
             />
@@ -370,7 +391,7 @@ export default function NewProductPage() {
             <Input
               label="Stock Quantity Available"
               type="number"
-              placeholder="50"
+              placeholder="0"
               value={stock}
               onChange={(e) => setStock(e.target.value)}
               error={errors.stock}
@@ -383,6 +404,8 @@ export default function NewProductPage() {
               placeholder="10"
               value={lowStockThreshold}
               onChange={(e) => setLowStockThreshold(e.target.value)}
+              error={errors.lowStockThreshold}
+              required
             />
           </div>
         </Card>
@@ -543,7 +566,13 @@ export default function NewProductPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row gap-6">
             <div className="w-full md:w-1/2 aspect-square rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden">
-              <img src={imageUrls[0] || 'https://images.unsplash.com/photo-1579722821273-0f6c7d44362f?auto=format&fit=crop&w=800&q=80'} alt="Preview" className="w-full h-full object-cover" />
+              {imageUrls[0] ? (
+                <img src={imageUrls[0]} alt="Product preview" className="w-full h-full object-cover" />
+              ) : (
+                <div className="flex h-full items-center justify-center text-slate-500">
+                  <ImageIcon className="h-10 w-10" />
+                </div>
+              )}
             </div>
 
             <div className="w-full md:w-1/2 space-y-3">
@@ -567,7 +596,9 @@ export default function NewProductPage() {
       {/* CONFIRMATION SUBMISSION DIALOG */}
       <ConfirmDialog
         isOpen={isConfirmModalOpen}
-        onClose={() => setIsConfirmModalOpen(false)}
+        onClose={() => {
+          if (!isSubmitting) setIsConfirmModalOpen(false);
+        }}
         onConfirm={handleSubmitConfirmed}
         title="Submit Product for Admin Review?"
         message="Your product will be submitted with status set to pending. The Fitness Species admin team will verify specifications and photos before making it visible on the live marketplace app."
@@ -579,9 +610,11 @@ export default function NewProductPage() {
       <Modal isOpen={isSuccessModalOpen} onClose={() => { setIsSuccessModalOpen(false); router.push('/products'); }} maxWidth="md">
         <div className="flex flex-col items-center text-center space-y-4 pt-2">
           <SuccessBadgeScene />
-          <h3 className="text-xl font-extrabold text-white">Product Submitted Successfully!</h3>
+          <h3 className="text-xl font-extrabold text-white">Product Submitted</h3>
           <p className="text-xs text-slate-300 leading-relaxed">
-            Your product entry is now <strong className="text-amber-400">Pending Review</strong>. You can track its approval status anytime from your products dashboard.
+            Your product entry is now{' '}
+            <strong className="text-amber-400">{submittedProduct?.status || 'Status unavailable'}</strong>.
+            {submittedProduct?.id ? ` Product ID: ${submittedProduct.id}.` : ''} You can track its approval status from your products dashboard.
           </p>
           <Button variant="primary" className="w-full mt-4" onClick={() => { setIsSuccessModalOpen(false); router.push('/products'); }}>
             Back to My Products

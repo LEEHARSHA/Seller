@@ -21,6 +21,7 @@ export default function EditProductPage() {
   const productId = params?.id as string;
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
@@ -41,6 +42,7 @@ export default function EditProductPage() {
     async function loadData() {
       if (!productId) return;
       setLoading(true);
+      setLoadError(null);
       try {
         const p = await getSellerProductByIdApi(productId);
         if (p) {
@@ -57,9 +59,11 @@ export default function EditProductPage() {
             ? p.images.map((img) => (typeof img === 'string' ? img : img.url))
             : [];
           setImageUrls(imgs);
+        } else {
+          setLoadError('Product not found or access denied.');
         }
       } catch (err) {
-        console.warn('Error loading product for edit:', err);
+        setLoadError(err instanceof Error ? err.message : 'Unable to load product for editing.');
       } finally {
         setLoading(false);
       }
@@ -81,7 +85,7 @@ export default function EditProductPage() {
   const handleSaveConfirmed = async () => {
     setSubmitting(true);
     try {
-      await updateSellerProductApi(productId, {
+      const updatedProduct = await updateSellerProductApi(productId, {
         name,
         brand,
         sku,
@@ -95,7 +99,7 @@ export default function EditProductPage() {
       });
 
       setIsConfirmOpen(false);
-      toast.success('Product Resubmitted for Approval', 'Status updated to pending review.');
+      toast.success('Product updated', `The backend returned status: ${updatedProduct.status}.`);
       router.push(`/products/${productId}`);
     } catch (err: any) {
       toast.error('Update Failed', err.message);
@@ -110,6 +114,19 @@ export default function EditProductPage() {
         <div className="space-y-6 max-w-4xl mx-auto animate-pulse">
           <div className="h-8 bg-slate-800 rounded w-1/4" />
           <div className="h-96 bg-slate-900 rounded-2xl border border-slate-800" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <AppShell>
+        <div role="alert" className="mx-auto max-w-4xl rounded-xl border border-rose-500/30 bg-rose-950/40 p-6 text-sm text-rose-200">
+          Product data is unavailable: {loadError}
+          <div className="mt-4">
+            <Button variant="outline" onClick={() => router.push('/products')}>Back to Products</Button>
+          </div>
         </div>
       </AppShell>
     );

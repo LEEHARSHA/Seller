@@ -20,9 +20,13 @@ export interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
   const router = useRouter();
-  const { user, sellerProfile, logout } = useAuth();
+  const { user, sellerProfile, loading: authLoading, authError, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
+  const accountName =
+    user?.displayName?.trim() ||
+    user?.email?.split('@')[0] ||
+    (authLoading ? 'Loading account…' : 'Account name unavailable');
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,14 +115,14 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
           trigger={
             <button className="flex items-center space-x-3 p-1.5 rounded-xl hover:bg-slate-800/80 transition-colors group">
               <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center text-slate-950 font-extrabold text-xs shadow-md">
-                {user?.displayName?.charAt(0) || 'S'}
+                {accountName.charAt(0).toUpperCase()}
               </div>
               <div className="text-left hidden md:block">
                 <p className="text-xs font-bold text-slate-200 group-hover:text-white leading-tight">
-                  {user?.displayName || 'Seller Account'}
+                  {accountName}
                 </p>
                 <p className="text-[10px] text-slate-400 leading-tight">
-                  {sellerProfile?.businessName || 'Seller profile unavailable'}
+                  {sellerProfile?.businessName || 'Complete seller profile'}
                 </p>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-transform" />
@@ -126,6 +130,11 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
           }
         />
       </div>
+      {authError && (
+        <p role="status" className="sr-only">
+          {authError}
+        </p>
+      )}
     </header>
   );
 };

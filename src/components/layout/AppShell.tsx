@@ -20,7 +20,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   useEffect(() => {
     if (loading) return;
 
-    const protectedPaths = ['/dashboard', '/products', '/profile', '/settings'];
+    const protectedPaths = ['/dashboard', '/products', '/profile', '/settings', '/inventory', '/analytics'];
     const shouldProtect = protectedPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 
     if (shouldProtect && authState !== 'signed-in') {
@@ -36,6 +36,11 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             <Sidebar isOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
             <div className="flex-1 flex flex-col min-w-0 min-h-screen">
               <Header onMobileMenuToggle={() => setMobileSidebarOpen(true)} />
+              {authError && (
+                <div role="alert" className="mx-4 mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900 lg:mx-8">
+                  {authError}
+                </div>
+              )}
               <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">{children}</main>
               <footer className="py-4 px-6 border-t border-slate-900 text-center text-xs text-slate-400">
                 Fitness Species Seller Portal &copy; {new Date().getFullYear()} Fitness Species Marketplace. All rights reserved.

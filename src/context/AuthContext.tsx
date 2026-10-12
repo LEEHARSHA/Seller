@@ -101,7 +101,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setUser({
             uid: fbUser.uid,
             email: fbUser.email,
-            displayName: fbUser.displayName || profile.ownerName || null,
+            displayName: fbUser.displayName,
             photoURL: fbUser.photoURL,
             role: 'seller',
             isSeller: true,

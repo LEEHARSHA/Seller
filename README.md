@@ -17,6 +17,8 @@ Official commercial seller portal for the **Fitness Species** marketplace (`http
 The production seller web portal is configured for deployment at `https://seller-lilac-five.vercel.app`.
 
 ### Environment Variables (.env.local)
+Set `NEXT_PUBLIC_API_URL` in the Vercel project environment to the deployed backend URL. The local `.env.local` value is only for development; production builds do not fall back to `localhost`.
+
 ```env
 NEXT_PUBLIC_API_URL=https://api.alk.co.in
 NEXT_PUBLIC_SELLER_DOMAIN=https://seller-lilac-five.vercel.app

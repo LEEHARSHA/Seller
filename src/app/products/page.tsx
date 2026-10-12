@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo, Suspense } from 'react';
+import React, { useEffect, useState, useMemo, Suspense, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '../../components/layout/AppShell';
 import { Card } from '../../components/ui/Card';
@@ -23,26 +23,29 @@ function ProductsContent() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('updated');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
 
-  useEffect(() => {
-    async function loadProducts() {
-      setLoading(true);
-      try {
-        const data = await getSellerProductsApi('all');
-        setProducts(data);
-      } catch (err) {
-        console.warn('Error loading products:', err);
-      } finally {
-        setLoading(false);
-      }
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      setProducts(await getSellerProductsApi('all'));
+    } catch (err) {
+      setProducts([]);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load products.');
+    } finally {
+      setLoading(false);
     }
-    loadProducts();
   }, []);
+
+  useEffect(() => {
+    void loadProducts();
+  }, [loadProducts]);
 
   const counts = useMemo(() => {
     return {
@@ -208,6 +211,13 @@ function ProductsContent() {
         </Button>
       </div>
 
+      {loadError ? (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+          <span>Product data is unavailable: {loadError}</span>
+          <Button variant="outline" onClick={() => void loadProducts()} isLoading={loading}>Retry</Button>
+        </div>
+      ) : (
+      <>
       {/* Filter Controls Bar */}
       <Card variant="default" padding="sm" className="space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -330,6 +340,8 @@ function ProductsContent() {
             pageSize={pageSize}
           />
         </div>
+      )}
+      </>
       )}
     </div>
   );
