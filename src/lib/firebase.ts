@@ -14,12 +14,21 @@ const missingConfig = Object.entries(firebaseConfig)
   .filter(([, value]) => !value)
   .map(([key]) => key);
 
-if (missingConfig.length > 0) {
-  throw new Error(`Missing Firebase configuration: ${missingConfig.join(', ')}`);
-}
+const hasFirebaseConfig = missingConfig.length === 0;
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const fallbackFirebaseConfig = {
+  apiKey: 'demo-api-key',
+  authDomain: 'demo-project.firebaseapp.com',
+  projectId: 'demo-project',
+  storageBucket: 'demo-project.appspot.com',
+  messagingSenderId: '0000000000',
+  appId: '1:0000000000:web:demo',
+};
+
+const app = !getApps().length
+  ? initializeApp(hasFirebaseConfig ? firebaseConfig : fallbackFirebaseConfig)
+  : getApp();
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
-export { app, auth, googleProvider };
+export { app, auth, googleProvider, hasFirebaseConfig };

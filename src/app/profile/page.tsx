@@ -12,7 +12,7 @@ import { updateSellerProfileApi } from '../../lib/api/seller';
 import { User, Store, Phone, Mail, MapPin, ShieldCheck, Save, Building } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { sellerProfile, user, refreshProfile, authError } = useAuth();
+  const { sellerProfile, user, firebaseUser, loading: authLoading, authState, refreshProfile, authError } = useAuth();
   const toast = useToast();
 
   const [businessName, setBusinessName] = useState('');
@@ -37,9 +37,14 @@ export default function ProfilePage() {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (authLoading || !firebaseUser || authState !== 'signed-in') {
+      toast.error('Sign-in required', 'Sign in again before saving your seller profile.');
+      return;
+    }
+
     setSaving(true);
     try {
-      await updateSellerProfileApi({
+      await updateSellerProfileApi(firebaseUser, {
         businessName,
         ownerName,
         phone,

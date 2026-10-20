@@ -10,6 +10,7 @@ import { Select } from '../../../../components/ui/Select';
 import { Textarea } from '../../../../components/ui/Textarea';
 import { ConfirmDialog } from '../../../../components/ui/ConfirmDialog';
 import { useToast } from '../../../../context/ToastContext';
+import { useAuth } from '../../../../context/AuthContext';
 import { getSellerProductByIdApi, updateSellerProductApi } from '../../../../lib/api/products';
 import { ALLOWED_CATEGORIES, AllowedCategory, Product } from '../../../../types';
 import { ArrowLeft, Save, Plus, Trash2, AlertTriangle, Send } from 'lucide-react';
@@ -18,6 +19,7 @@ export default function EditProductPage() {
   const params = useParams();
   const router = useRouter();
   const toast = useToast();
+  const { firebaseUser, loading: authLoading, authState } = useAuth();
   const productId = params?.id as string;
 
   const [loading, setLoading] = useState(true);
@@ -40,11 +42,16 @@ export default function EditProductPage() {
 
   useEffect(() => {
     async function loadData() {
+      if (authLoading) return;
+      if (!firebaseUser || authState !== 'signed-in') {
+        setLoading(false);
+        return;
+      }
       if (!productId) return;
       setLoading(true);
       setLoadError(null);
       try {
-        const p = await getSellerProductByIdApi(productId);
+        const p = await getSellerProductByIdApi(firebaseUser, productId);
         if (p) {
           setName(p.name);
           setBrand(p.brand);
@@ -69,7 +76,7 @@ export default function EditProductPage() {
       }
     }
     loadData();
-  }, [productId]);
+  }, [authLoading, authState, firebaseUser, productId]);
 
   const handleAddImage = () => {
     if (newImageUrl.trim()) {
@@ -83,9 +90,14 @@ export default function EditProductPage() {
   };
 
   const handleSaveConfirmed = async () => {
+    if (!firebaseUser || authLoading || authState !== 'signed-in') {
+      toast.error('Sign-in required', 'Sign in again before updating this product.');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const updatedProduct = await updateSellerProductApi(productId, {
+      const updatedProduct = await updateSellerProductApi(firebaseUser, productId, {
         name,
         brand,
         sku,

@@ -37,17 +37,23 @@ const MarketplaceSphereScene = dynamic(() => import('../../components/3d/Marketp
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, sellerProfile } = useAuth();
+  const { user, firebaseUser, loading: authLoading, authState, sellerProfile } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
+      if (authLoading) return;
+      if (!firebaseUser || authState !== 'signed-in') {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setProductsError(null);
       try {
-        const data = await getSellerProductsApi('all');
+        const data = await getSellerProductsApi(firebaseUser, 'all');
         setProducts(data);
       } catch (err) {
         console.warn('Dashboard data fetch error:', err);
@@ -57,7 +63,7 @@ export default function DashboardPage() {
       }
     }
     loadData();
-  }, []);
+  }, [authLoading, authState, firebaseUser]);
 
   const totalProducts = products.length;
   const pendingCount = products.filter((p) => p.status === 'pending').length;

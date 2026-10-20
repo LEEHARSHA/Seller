@@ -12,12 +12,14 @@ import { Badge } from '../../components/ui/Badge';
 import { Table, Column } from '../../components/ui/Table';
 import { Pagination } from '../../components/ui/Pagination';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { useAuth } from '../../context/AuthContext';
 import { Product } from '../../types';
 import { getSellerProductsApi } from '../../lib/api/products';
 import { Plus, Search, Eye, Edit, Package } from 'lucide-react';
 
 function ProductsContent() {
   const router = useRouter();
+  const { firebaseUser, loading: authLoading, authState } = useAuth();
   const searchParams = useSearchParams();
   const initialSearch = searchParams ? searchParams.get('search') || '' : '';
 
@@ -31,17 +33,23 @@ function ProductsContent() {
   const pageSize = 8;
 
   const loadProducts = useCallback(async () => {
+    if (authLoading) return;
+    if (!firebaseUser || authState !== 'signed-in') {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setLoadError(null);
     try {
-      setProducts(await getSellerProductsApi('all'));
+      setProducts(await getSellerProductsApi(firebaseUser, 'all'));
     } catch (err) {
       setProducts([]);
       setLoadError(err instanceof Error ? err.message : 'Unable to load products.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authLoading, authState, firebaseUser]);
 
   useEffect(() => {
     void loadProducts();

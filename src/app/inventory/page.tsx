@@ -7,12 +7,14 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Table, Column } from '../../components/ui/Table';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { getSellerProductsApi, updateSellerProductStockApi } from '../../lib/api/products';
 import { Product } from '../../types';
 import { Boxes, RefreshCw } from 'lucide-react';
 
 export default function InventoryPage() {
   const toast = useToast();
+  const { firebaseUser, loading: authLoading, authState } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [stockValues, setStockValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -20,10 +22,16 @@ export default function InventoryPage() {
   const [error, setError] = useState<string | null>(null);
 
   const loadInventory = useCallback(async () => {
+    if (authLoading) return;
+    if (!firebaseUser || authState !== 'signed-in') {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const result = await getSellerProductsApi('all');
+      const result = await getSellerProductsApi(firebaseUser, 'all');
       setProducts(result);
       setStockValues(Object.fromEntries(result.map((product) => [product.id, String(product.stock)])));
     } catch (loadError) {
@@ -31,13 +39,18 @@ export default function InventoryPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authLoading, authState, firebaseUser]);
 
   useEffect(() => {
     void loadInventory();
   }, [loadInventory]);
 
   const saveStock = async (product: Product) => {
+    if (!firebaseUser || authLoading || authState !== 'signed-in') {
+      setError('Sign in before updating inventory.');
+      return;
+    }
+
     const stock = Number(stockValues[product.id]);
     if (!Number.isInteger(stock) || stock < 0) {
       setError('Stock must be a non-negative whole number.');
@@ -47,7 +60,7 @@ export default function InventoryPage() {
     setSavingId(product.id);
     setError(null);
     try {
-      const updatedProduct = await updateSellerProductStockApi(product.id, stock);
+      const updatedProduct = await updateSellerProductStockApi(firebaseUser, product.id, stock);
       setProducts((current) =>
         current.map((item) => (item.id === updatedProduct.id ? updatedProduct : item)),
       );

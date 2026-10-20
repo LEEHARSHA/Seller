@@ -3,21 +3,29 @@
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '../../components/layout/AppShell';
 import { Card } from '../../components/ui/Card';
+import { useAuth } from '../../context/AuthContext';
 import { getSellerProductsApi } from '../../lib/api/products';
 import { Product } from '../../types';
 import { BarChart3, Boxes, Package, ShoppingBag } from 'lucide-react';
 
 export default function AnalyticsPage() {
+  const { firebaseUser, loading: authLoading, authState } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadAnalytics() {
+      if (authLoading) return;
+      if (!firebaseUser || authState !== 'signed-in') {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
       try {
-        setProducts(await getSellerProductsApi('all'));
+        setProducts(await getSellerProductsApi(firebaseUser, 'all'));
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Unable to load seller analytics.');
       } finally {
@@ -26,7 +34,7 @@ export default function AnalyticsPage() {
     }
 
     void loadAnalytics();
-  }, []);
+  }, [authLoading, authState, firebaseUser]);
 
   const totalStock = products.reduce((total, product) => total + product.stock, 0);
   const pendingProducts = products.filter((product) => product.status === 'pending').length;

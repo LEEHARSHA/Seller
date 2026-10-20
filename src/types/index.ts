@@ -18,6 +18,8 @@ export interface SellerProfile {
   email: string;
   phone: string;
   businessAddress: BusinessAddress;
+  profileComplete?: boolean;
+  profileCompletion?: number;
   status: SellerStatus;
   rejectionReason?: string | null;
   createdAt?: string;
@@ -101,7 +103,6 @@ export interface AuthUser {
   photoURL?: string | null;
   role?: UserRole;
   isSeller?: boolean;
-  token?: string;
 }
 
 export interface ApiResponse<T> {

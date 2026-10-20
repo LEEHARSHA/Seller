@@ -6,6 +6,7 @@ import { AppShell } from '../../../components/layout/AppShell';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
+import { useAuth } from '../../../context/AuthContext';
 import { getSellerProductByIdApi } from '../../../lib/api/products';
 import { Product } from '../../../types';
 import {
@@ -25,6 +26,7 @@ import {
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { firebaseUser, loading: authLoading, authState } = useAuth();
   const productId = params?.id as string;
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -34,11 +36,16 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     async function loadProduct() {
+      if (authLoading) return;
+      if (!firebaseUser || authState !== 'signed-in') {
+        setLoading(false);
+        return;
+      }
       if (!productId) return;
       setLoading(true);
       setLoadError(null);
       try {
-        const item = await getSellerProductByIdApi(productId);
+        const item = await getSellerProductByIdApi(firebaseUser, productId);
         setProduct(item);
       } catch (err) {
         setProduct(null);
@@ -48,7 +55,7 @@ export default function ProductDetailPage() {
       }
     }
     loadProduct();
-  }, [productId]);
+  }, [authLoading, authState, firebaseUser, productId]);
 
   if (loading) {
     return (

@@ -6,13 +6,14 @@ import { AlertTriangle } from 'lucide-react';
 export interface ConfirmDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   title: string;
-  message: string;
+  message: React.ReactNode;
   confirmText?: string;
   cancelText?: string;
   variant?: 'danger' | 'primary' | 'success';
   isLoading?: boolean;
+  isConfirmDisabled?: boolean;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -25,6 +26,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   cancelText = 'Cancel',
   variant = 'primary',
   isLoading = false,
+  isConfirmDisabled = false,
 }) => {
   return (
     <Modal isOpen={isOpen} onClose={onClose} maxWidth="md">
@@ -33,7 +35,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <AlertTriangle className="w-7 h-7" />
         </div>
         <h3 className="text-lg font-bold text-white leading-tight">{title}</h3>
-        <p className="text-sm text-slate-300 leading-relaxed">{message}</p>
+        <div className="text-sm text-slate-300 leading-relaxed">{message}</div>
 
         <div className="flex items-center space-x-3 w-full pt-4">
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={isLoading}>
@@ -44,6 +46,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             className="flex-1"
             onClick={onConfirm}
             isLoading={isLoading}
+            disabled={isConfirmDisabled}
           >
             {confirmText}
           </Button>

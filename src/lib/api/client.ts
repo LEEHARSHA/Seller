@@ -1,38 +1,35 @@
-import { auth } from '../firebase';
+import type { User } from 'firebase/auth';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '');
 
 export interface RequestOptions extends RequestInit {
-  token?: string;
+  user: User;
 }
 
-export async function getAuthToken(): Promise<string | null> {
-  const user = auth.currentUser;
-  if (!user) return null;
-  return user.getIdToken();
-}
-
-export async function fetchApi<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { token: providedToken, headers = {}, ...customOptions } = options;
-  const token = providedToken || (await getAuthToken());
-
-  if (!token) {
-    throw new Error('You must be signed in to access this seller service.');
+export async function fetchApi<T>(endpoint: string, options: RequestOptions): Promise<T> {
+  const { user, headers, ...customOptions } = options;
+  if (!user) {
+    throw Object.assign(
+      new Error('You must be signed in to access this seller service.'),
+      { code: 'auth/required', status: 401 },
+    );
   }
   if (!API_BASE_URL) {
     throw new Error('The seller API URL is not configured. Set NEXT_PUBLIC_API_URL for this deployment.');
   }
 
+  const token = await user.getIdToken();
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  const requestHeaders = new Headers(headers);
+  if (!requestHeaders.has('Content-Type')) {
+    requestHeaders.set('Content-Type', 'application/json');
+  }
+  requestHeaders.set('Authorization', `Bearer ${token}`);
 
   try {
     const response = await fetch(url, {
       ...customOptions,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        ...(headers as Record<string, string>),
-      },
+      headers: requestHeaders,
     });
 
     let data: unknown = null;
@@ -51,7 +48,10 @@ export async function fetchApi<T>(endpoint: string, options: RequestOptions = {}
         (typeof responseData.message === 'string' && responseData.message) ||
         (typeof responseData.error === 'string' && responseData.error) ||
         `Request failed with status ${response.status}.`;
-      throw Object.assign(new Error(message), { status: response.status, data });
+      const actionableMessage = response.status === 401
+        ? 'Your session could not be verified. Please sign in again.'
+        : message;
+      throw Object.assign(new Error(actionableMessage), { status: response.status, data });
     }
 
     return (data ?? (null as T)) as T;

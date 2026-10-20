@@ -2,6 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '../../../components/layout/AppShell';
 import { Card } from '../../../components/ui/Card';
@@ -45,7 +46,12 @@ const SuccessBadgeScene = dynamic(() => import('../../../components/3d/SuccessBa
 export default function NewProductPage() {
   const router = useRouter();
   const toast = useToast();
-  const { firebaseUser } = useAuth();
+  const {
+    firebaseUser,
+    loading: authLoading,
+    authState,
+    sellerProfileSetupRequired,
+  } = useAuth();
 
   // Section 1: Basic Info
   const [name, setName] = useState('');
@@ -86,8 +92,13 @@ export default function NewProductPage() {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [validationSummary, setValidationSummary] = useState('');
+  const [backendRequiresProfileCompletion, setBackendRequiresProfileCompletion] = useState(false);
   const [submittedProduct, setSubmittedProduct] = useState<Product | null>(null);
   const submissionInProgress = useRef(false);
+  const profileSetupRequired = sellerProfileSetupRequired || backendRequiresProfileCompletion;
+
+  const formSummaryRef = useRef<HTMLFormElement>(null);
 
   const calculateDiscount = () => {
     const p = parseFloat(price);
@@ -116,6 +127,7 @@ export default function NewProductPage() {
         { id: String(Date.now()), title: variantTitle.trim(), stock: parseInt(variantStock) || 0 },
       ]);
       setVariantTitle('');
+      setVariantStock('');
     }
   };
 
@@ -137,40 +149,112 @@ export default function NewProductPage() {
 
   const validateForm = () => {
     const errs: Record<string, string> = {};
-    if (!name.trim()) errs.name = 'Product name is required.';
-    if (!brand.trim()) errs.brand = 'Brand name is required.';
-    if (!category) errs.category = 'Category is required.';
-    if (!price || !Number.isFinite(Number(price)) || Number(price) <= 0) errs.price = 'Valid price is required.';
-    if (!stock || !Number.isInteger(Number(stock)) || Number(stock) < 0) errs.stock = 'Valid stock quantity is required.';
-    if (!Number.isInteger(Number(lowStockThreshold)) || Number(lowStockThreshold) < 0) {
+
+    let currentImages = [...imageUrls];
+    if (currentImages.length === 0 && newImageUrl.trim()) {
+      const candidate = newImageUrl.trim();
+      try {
+        const parsed = new URL(candidate);
+        if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+          currentImages = [candidate];
+          setImageUrls(currentImages);
+          setNewImageUrl('');
+        }
+      } catch {
+        // let image URL validation catch invalid URL format
+      }
+    }
+
+    if (name.trim().length < 2 || name.trim().length > 200) {
+      errs.name = 'Product name must be between 2 and 200 characters.';
+    }
+    if (!brand.trim() || brand.trim().length > 120) {
+      errs.brand = 'Brand name is required and must be 120 characters or fewer.';
+    }
+    if (sku.length > 100) errs.sku = 'SKU must be 100 characters or fewer.';
+    if (!category || !ALLOWED_CATEGORIES.includes(category)) errs.category = 'Category is required.';
+    if (!price.trim() || !Number.isFinite(Number(price)) || Number(price) <= 0) {
+      errs.price = 'Valid price greater than 0 is required.';
+    }
+    if (compareAtPrice.trim()) {
+      const comparePrice = Number(compareAtPrice);
+      if (!Number.isFinite(comparePrice) || comparePrice <= Number(price)) {
+        errs.compareAtPrice = 'Compare-at price must be greater than the selling price.';
+      }
+    }
+    if (!stock.trim() || !Number.isInteger(Number(stock)) || Number(stock) < 0) {
+      errs.stock = 'Valid stock quantity is required (non-negative whole number).';
+    }
+    if (!lowStockThreshold.trim() || !Number.isInteger(Number(lowStockThreshold)) || Number(lowStockThreshold) < 0) {
       errs.lowStockThreshold = 'Low-stock threshold must be a non-negative whole number.';
     }
-    if (imageUrls.length === 0) errs.images = 'At least one product image is required.';
+    if (currentImages.length === 0) {
+      errs.images = 'At least one product image is required.';
+    } else if (currentImages.length > 30) {
+      errs.images = 'A product can have no more than 30 images.';
+    } else if (currentImages.some((imageUrl) => {
+      try {
+        const parsed = new URL(imageUrl);
+        return parsed.protocol !== 'https:' && parsed.protocol !== 'http:';
+      } catch {
+        return true;
+      }
+    })) {
+      errs.images = 'Each product image must use a valid HTTP or HTTPS URL.';
+    }
+    if (variants.length > 100) errs.variants = 'A product can have no more than 100 variants.';
+    if (description.length > 10000) errs.description = 'Description must be 10,000 characters or fewer.';
+    if (shortDescription.length > 500) errs.shortDescription = 'Short description must be 500 characters or fewer.';
+    if (subCategory.trim().length > 120) errs.subCategory = 'Subcategory must be 120 characters or fewer.';
+
     setErrors(errs);
-    return Object.keys(errs).length === 0;
+    if (Object.keys(errs).length > 0) {
+      setValidationSummary(
+        'Submission is blocked. Please correct the highlighted fields, including the required product image, then try again.',
+      );
+      toast.error(
+        'Validation Error',
+        'Please correct the highlighted fields before submitting.',
+      );
+      setTimeout(() => {
+        formSummaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+      return false;
+    }
+
+    setValidationSummary('');
+    return true;
+  };
+
+  const openConfirmation = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (validateForm()) {
+      setIsConfirmModalOpen(true);
+    }
   };
 
   const handleSubmitConfirmed = async () => {
     if (submissionInProgress.current) return;
     if (!validateForm()) {
-      toast.error('Product details need attention', 'Complete the required fields and submit again.');
       return;
     }
-    if (!firebaseUser) {
-      toast.error('Sign-in required', 'Sign in again before submitting this product.');
+    if (authLoading || !firebaseUser || authState !== 'signed-in') {
+      toast.error('Sign-in required', 'Your Firebase session is not ready. Sign in again before submitting this product.');
+      return;
+    }
+    if (profileSetupRequired) {
       return;
     }
 
     submissionInProgress.current = true;
     setIsSubmitting(true);
     try {
-      const token = await firebaseUser.getIdToken(true);
       const specObj: Record<string, string> = {};
       specs.forEach((s) => {
         specObj[s.key] = s.value;
       });
 
-      const createdProduct = await createSellerProductApi({
+      const createdProduct = await createSellerProductApi(firebaseUser, {
         name,
         brand,
         sku,
@@ -191,19 +275,27 @@ export default function NewProductPage() {
           attributes: {},
         })),
         specifications: specObj,
-      }, token);
+      });
 
-      if (!createdProduct.status) {
-        throw new Error('The backend did not confirm the product status.');
-      }
       setSubmittedProduct(createdProduct);
       setIsConfirmModalOpen(false);
       setIsSuccessModalOpen(true);
       toast.success(
         'Product submitted',
-        `The backend returned status: ${createdProduct.status}.`,
+        `Product ${createdProduct.id} was saved with status ${createdProduct.status}.`,
       );
     } catch (err) {
+      const status = typeof err === 'object' && err !== null && 'status' in err
+        ? (err as { status?: number }).status
+        : undefined;
+      if (status === 409) {
+        setBackendRequiresProfileCompletion(true);
+        toast.error(
+          'Complete your seller profile',
+          'The backend requires a complete seller profile before it can accept products.',
+        );
+        return;
+      }
       const message = err instanceof Error ? err.message : 'The product could not be submitted.';
       toast.error('Submission Failed', message);
     } finally {
@@ -214,7 +306,12 @@ export default function NewProductPage() {
 
   return (
     <AppShell>
-      <div className="space-y-8 max-w-5xl mx-auto">
+      <form
+        ref={formSummaryRef}
+        onSubmit={openConfirmation}
+        noValidate
+        className="space-y-8 max-w-5xl mx-auto"
+      >
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
           <div>
@@ -231,6 +328,7 @@ export default function NewProductPage() {
           <div className="flex items-center space-x-3">
             <Button
               variant="outline"
+              type="button"
               onClick={() => setIsPreviewModalOpen(true)}
               icon={<Eye className="w-4 h-4" />}
             >
@@ -238,15 +336,18 @@ export default function NewProductPage() {
             </Button>
             <Button
               variant="primary"
-              onClick={() => {
-                if (validateForm()) setIsConfirmModalOpen(true);
-              }}
+              type="submit"
               icon={<Send className="w-4 h-4" />}
             >
               Submit for Approval
             </Button>
           </div>
         </div>
+        {validationSummary && (
+          <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+            {validationSummary}
+          </div>
+        )}
 
         {/* 3D Visual Bar */}
         <Card variant="glass" padding="sm" className="flex items-center justify-between overflow-hidden">
@@ -297,6 +398,7 @@ export default function NewProductPage() {
               placeholder="SKU-12345"
               value={sku}
               onChange={(e) => setSku(e.target.value)}
+              error={errors.sku}
             />
 
             <Select
@@ -304,6 +406,7 @@ export default function NewProductPage() {
               value={category}
               onChange={(e) => setCategory(e.target.value as AllowedCategory)}
               options={ALLOWED_CATEGORIES}
+              error={errors.category}
               helperText="Note: Prescription medicines are strictly not allowed on the platform."
             />
 
@@ -312,6 +415,7 @@ export default function NewProductPage() {
               placeholder="Product subcategory"
               value={subCategory}
               onChange={(e) => setSubCategory(e.target.value)}
+              error={errors.subCategory}
             />
           </div>
         </Card>
@@ -330,6 +434,7 @@ export default function NewProductPage() {
             placeholder="27g Protein Isolate per serving with digestive enzymes."
             value={shortDescription}
             onChange={(e) => setShortDescription(e.target.value)}
+            error={errors.shortDescription}
           />
 
           <Textarea
@@ -338,6 +443,7 @@ export default function NewProductPage() {
             placeholder="Detailed product information, ingredients, usage instructions, and safety warnings..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            error={errors.description}
           />
         </Card>
 
@@ -367,6 +473,7 @@ export default function NewProductPage() {
               placeholder="0.00"
               value={compareAtPrice}
               onChange={(e) => setCompareAtPrice(e.target.value)}
+              error={errors.compareAtPrice}
             />
 
             <div className="flex flex-col space-y-1.5 justify-center">
@@ -429,7 +536,7 @@ export default function NewProductPage() {
               onChange={(e) => setNewImageUrl(e.target.value)}
               className="flex-1"
             />
-            <Button variant="secondary" onClick={addImageUrl} icon={<Plus className="w-4 h-4" />}>
+            <Button variant="secondary" type="button" onClick={addImageUrl} icon={<Plus className="w-4 h-4" />}>
               Add Image URL
             </Button>
           </div>
@@ -478,11 +585,12 @@ export default function NewProductPage() {
               onChange={(e) => setVariantStock(e.target.value)}
               className="w-full sm:w-28"
             />
-            <Button variant="secondary" onClick={addVariant} icon={<Plus className="w-4 h-4" />}>
+            <Button variant="secondary" type="button" onClick={addVariant} icon={<Plus className="w-4 h-4" />}>
               Add Variant
             </Button>
           </div>
 
+          {errors.variants && <p role="alert" className="text-xs text-rose-400 font-medium">{errors.variants}</p>}
           <div className="space-y-2">
             {variants.map((v) => (
               <div key={v.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
@@ -491,6 +599,7 @@ export default function NewProductPage() {
                   <p className="text-[10px] text-slate-400">Stock: {v.stock} units</p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => removeVariant(v.id)}
                   className="text-slate-500 hover:text-rose-400 p-1"
                 >
@@ -523,7 +632,7 @@ export default function NewProductPage() {
               onChange={(e) => setSpecVal(e.target.value)}
               className="flex-1"
             />
-            <Button variant="secondary" onClick={addSpec} icon={<Plus className="w-4 h-4" />}>
+            <Button variant="secondary" type="button" onClick={addSpec} icon={<Plus className="w-4 h-4" />}>
               Add Spec
             </Button>
           </div>
@@ -535,7 +644,7 @@ export default function NewProductPage() {
                   <p className="text-[10px] font-bold text-slate-400 uppercase">{s.key}</p>
                   <p className="text-xs font-semibold text-white">{s.value}</p>
                 </div>
-                <button onClick={() => removeSpec(idx)} className="text-slate-500 hover:text-rose-400 p-1">
+                <button type="button" onClick={() => removeSpec(idx)} className="text-slate-500 hover:text-rose-400 p-1">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -543,23 +652,27 @@ export default function NewProductPage() {
           </div>
         </Card>
 
+        {validationSummary && (
+          <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+            {validationSummary}
+          </div>
+        )}
+
         {/* Bottom Form Action Buttons */}
         <div className="flex items-center justify-end space-x-4 pt-4 border-t border-slate-800">
-          <Button variant="outline" onClick={() => router.push('/products')}>
+          <Button variant="outline" type="button" onClick={() => router.push('/products')}>
             Cancel
           </Button>
           <Button
             variant="primary"
             size="lg"
-            onClick={() => {
-              if (validateForm()) setIsConfirmModalOpen(true);
-            }}
+            type="submit"
             icon={<Send className="w-4 h-4" />}
           >
             Submit for Admin Review
           </Button>
         </div>
-      </div>
+      </form>
 
       {/* CUSTOMER PREVIEW MODAL */}
       <Modal isOpen={isPreviewModalOpen} onClose={() => setIsPreviewModalOpen(false)} maxWidth="2xl" title="Live Customer Marketplace Preview">
@@ -601,9 +714,38 @@ export default function NewProductPage() {
         }}
         onConfirm={handleSubmitConfirmed}
         title="Submit Product for Admin Review?"
-        message="Your product will be submitted with status set to pending. The Fitness Species admin team will verify specifications and photos before making it visible on the live marketplace app."
+        message={profileSetupRequired ? (
+          <div className="space-y-2">
+            <p className="text-amber-300 font-medium">
+              Your seller profile must be complete before products can be submitted.
+            </p>
+            <p className="text-slate-300">
+              Please{' '}
+              <Link href="/profile" className="font-semibold text-emerald-400 underline underline-offset-2 hover:text-emerald-300">
+                complete your seller profile
+              </Link>
+              {' '}first, then return here to submit this product for review.
+            </p>
+          </div>
+        ) : authLoading || !firebaseUser || authState !== 'signed-in' ? (
+          <div className="space-y-2">
+            <p className="text-amber-300 font-medium">
+              A signed-in Firebase session is required to submit this product.
+            </p>
+            <p className="text-slate-300">
+              Please{' '}
+              <Link href="/login" className="font-semibold text-emerald-400 underline underline-offset-2 hover:text-emerald-300">
+                sign in
+              </Link>
+              {' '}and try again.
+            </p>
+          </div>
+        ) : (
+          'Your product will be sent to the Fitness Species admin team with pending status for review. The product is not submitted until the backend confirms it was saved.'
+        )}
         confirmText="Confirm & Submit"
         isLoading={isSubmitting}
+        isConfirmDisabled={authLoading || !firebaseUser || authState !== 'signed-in' || profileSetupRequired}
       />
 
       {/* SUCCESS CELEBRATION MODAL */}

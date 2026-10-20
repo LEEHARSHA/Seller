@@ -24,7 +24,7 @@ const HeroDumbbellScene = dynamic(() => import('../../components/3d/HeroDumbbell
 
 export default function LoginPage() {
   const router = useRouter();
-  const { authState, loading: authLoading, authError, refreshProfile } = useAuth();
+  const { authState, loading: authLoading, authError, firebaseUser, refreshProfile } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -100,11 +100,17 @@ export default function LoginPage() {
     let accountCreated = false;
     let applicationSubmitted = false;
     try {
+      let sellerAuthUser = firebaseUser;
       if (auth.currentUser?.email?.toLowerCase() !== applyEmail.toLowerCase()) {
-        await createUserWithEmailAndPassword(auth, applyEmail, applyPassword);
+        const credential = await createUserWithEmailAndPassword(auth, applyEmail, applyPassword);
+        sellerAuthUser = credential.user;
         accountCreated = true;
       }
-      await updateSellerProfileApi({
+      if (!sellerAuthUser) {
+        throw new Error('A signed-in Firebase user is required to submit a seller application.');
+      }
+
+      await updateSellerProfileApi(sellerAuthUser, {
         businessName: applyBusinessName,
         ownerName: applyOwnerName,
         phone: applyPhone,
@@ -116,7 +122,7 @@ export default function LoginPage() {
         },
       });
       applicationSubmitted = true;
-      await refreshProfile();
+      await refreshProfile(sellerAuthUser);
       setApplySuccessMessage('Application submitted successfully! Our team will review your store details.');
       setTimeout(() => {
         setIsApplyDrawerOpen(false);
