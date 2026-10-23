@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -76,6 +76,12 @@ export default function NewProductPage() {
   // Section 5: Images
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadFilePosition, setUploadFilePosition] = useState(0);
+  const [uploadFileCount, setUploadFileCount] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const uploadInProgress = useRef(false);
+  const uploadController = useRef<AbortController | null>(null);
 
   // Section 6: Variants
   const [variants, setVariants] = useState<Array<{ id: string; title: string; stock: number }>>([]);
@@ -101,6 +107,8 @@ export default function NewProductPage() {
 
   const formSummaryRef = useRef<HTMLFormElement>(null);
 
+  useEffect(() => () => uploadController.current?.abort(), []);
+
   const calculateDiscount = () => {
     const p = parseFloat(price);
     const cp = parseFloat(compareAtPrice);
@@ -114,6 +122,7 @@ export default function NewProductPage() {
     const files = Array.from(event.currentTarget.files || []);
     event.currentTarget.value = '';
     if (files.length === 0) return;
+    if (uploadInProgress.current) return;
     if (!firebaseUser || authState !== 'signed-in') {
       toast.error('Sign-in required', 'Sign in again before uploading product images.');
       return;
@@ -123,11 +132,38 @@ export default function NewProductPage() {
       return;
     }
 
+    const invalidFile = files.find((file) =>
+      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+      || !file.size
+      || file.size > 10 * 1024 * 1024,
+    );
+    if (invalidFile) {
+      const message = invalidFile.size > 10 * 1024 * 1024
+        ? 'Each image must be smaller than 10 MB.'
+        : 'Use a JPEG, PNG, or WebP image.';
+      setUploadError(message);
+      toast.error('Image upload failed', message);
+      return;
+    }
+
+    uploadInProgress.current = true;
+    const controller = new AbortController();
+    uploadController.current = controller;
     setIsUploadingImages(true);
+    setUploadProgress(0);
+    setUploadFilePosition(0);
+    setUploadFileCount(files.length);
+    setUploadError(null);
     try {
       const uploadedUrls: string[] = [];
-      for (const file of files) {
-        const url = await uploadSellerProductImage(firebaseUser, file);
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        setUploadFilePosition(index + 1);
+        setUploadProgress(0);
+        const url = await uploadSellerProductImage(firebaseUser, file, {
+          onProgress: ({ percentage }) => setUploadProgress(percentage),
+          signal: controller.signal,
+        });
         uploadedUrls.push(url);
         setImageUrls((current) => [...current, url]);
       }
@@ -138,12 +174,17 @@ export default function NewProductPage() {
       });
       toast.success('Images uploaded', `${uploadedUrls.length} product image(s) are ready.`);
     } catch (error) {
+      if (controller.signal.aborted) return;
+      const message = error instanceof Error ? error.message : 'Unable to upload product images.';
+      setUploadError(message);
       toast.error(
         'Image upload failed',
-        error instanceof Error ? error.message : 'Unable to upload product images.',
+        message,
       );
     } finally {
-      setIsUploadingImages(false);
+      uploadInProgress.current = false;
+      uploadController.current = null;
+      if (!controller.signal.aborted) setIsUploadingImages(false);
     }
   };
 
@@ -244,6 +285,10 @@ export default function NewProductPage() {
 
   const openConfirmation = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (uploadInProgress.current || isUploadingImages) {
+      toast.error('Images are still uploading', 'Wait for all product images to finish uploading.');
+      return;
+    }
     if (validateForm()) {
       setIsConfirmModalOpen(true);
     }
@@ -251,7 +296,7 @@ export default function NewProductPage() {
 
   const handleSubmitConfirmed = async () => {
     if (submissionInProgress.current) return;
-    if (isUploadingImages) {
+    if (uploadInProgress.current || isUploadingImages) {
       toast.error('Images are still uploading', 'Wait for all product images to finish uploading.');
       return;
     }
@@ -548,10 +593,15 @@ export default function NewProductPage() {
           </div>
 
           {errors.images && <p className="text-xs text-rose-400 font-medium">{errors.images}</p>}
+          {uploadError && <p role="alert" className="text-xs text-rose-400 font-medium">{uploadError}</p>}
 
           <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-950/50 p-6 text-sm text-slate-300 hover:border-emerald-500">
             <Upload className="h-5 w-5 text-emerald-400" />
-            <span>{isUploadingImages ? 'Uploading images…' : 'Choose JPEG, PNG, or WebP images (max 10 MB each)'}</span>
+            <span>
+              {isUploadingImages
+                ? `Uploading image ${uploadFilePosition} of ${uploadFileCount}… ${uploadProgress}%`
+                : 'Choose JPEG, PNG, or WebP images (max 10 MB each)'}
+            </span>
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
@@ -561,6 +611,21 @@ export default function NewProductPage() {
               className="sr-only"
             />
           </label>
+          {isUploadingImages && (
+            <div
+              role="progressbar"
+              aria-label={`Uploading image ${uploadFilePosition} of ${uploadFileCount}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={uploadProgress}
+              className="h-2 overflow-hidden rounded-full bg-slate-800"
+            >
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-[width]"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
             {imageUrls.map((url, idx) => (

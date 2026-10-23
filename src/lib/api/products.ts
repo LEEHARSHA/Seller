@@ -53,6 +53,19 @@ export async function createSellerProductApi(
     specifications,
   } = payload;
 
+  if (
+    !images?.length
+    || images.some((imageUrl) => {
+      try {
+        return new URL(imageUrl).protocol !== 'https:';
+      } catch {
+        return true;
+      }
+    })
+  ) {
+    throw new Error('Upload at least one product image before submitting.');
+  }
+
   const res = await fetchApi<{ success: boolean; product: Product }>('/api/seller/products', {
     user,
     method: 'POST',
