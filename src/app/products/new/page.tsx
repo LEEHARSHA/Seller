@@ -15,6 +15,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { useToast } from '../../../context/ToastContext';
 import { useAuth } from '../../../context/AuthContext';
 import { createSellerProductApi } from '../../../lib/api/products';
+import { uploadSellerProductImage } from '../../../lib/product-images';
 import { ALLOWED_CATEGORIES, AllowedCategory, Product } from '../../../types';
 import {
   Upload,
@@ -74,7 +75,7 @@ export default function NewProductPage() {
 
   // Section 5: Images
   const [imageUrls, setImageUrls] = useState<string[]>([]);
-  const [newImageUrl, setNewImageUrl] = useState('');
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
 
   // Section 6: Variants
   const [variants, setVariants] = useState<Array<{ id: string; title: string; stock: number }>>([]);
@@ -109,10 +110,40 @@ export default function NewProductPage() {
     return 0;
   };
 
-  const addImageUrl = () => {
-    if (newImageUrl.trim()) {
-      setImageUrls([...imageUrls, newImageUrl.trim()]);
-      setNewImageUrl('');
+  const handleImageFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.currentTarget.files || []);
+    event.currentTarget.value = '';
+    if (files.length === 0) return;
+    if (!firebaseUser || authState !== 'signed-in') {
+      toast.error('Sign-in required', 'Sign in again before uploading product images.');
+      return;
+    }
+    if (imageUrls.length + files.length > 30) {
+      toast.error('Too many images', 'A product can have no more than 30 images.');
+      return;
+    }
+
+    setIsUploadingImages(true);
+    try {
+      const uploadedUrls: string[] = [];
+      for (const file of files) {
+        const url = await uploadSellerProductImage(firebaseUser, file);
+        uploadedUrls.push(url);
+        setImageUrls((current) => [...current, url]);
+      }
+      setErrors((current) => {
+        const remaining = { ...current };
+        delete remaining.images;
+        return remaining;
+      });
+      toast.success('Images uploaded', `${uploadedUrls.length} product image(s) are ready.`);
+    } catch (error) {
+      toast.error(
+        'Image upload failed',
+        error instanceof Error ? error.message : 'Unable to upload product images.',
+      );
+    } finally {
+      setIsUploadingImages(false);
     }
   };
 
@@ -150,21 +181,6 @@ export default function NewProductPage() {
   const validateForm = () => {
     const errs: Record<string, string> = {};
 
-    let currentImages = [...imageUrls];
-    if (currentImages.length === 0 && newImageUrl.trim()) {
-      const candidate = newImageUrl.trim();
-      try {
-        const parsed = new URL(candidate);
-        if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
-          currentImages = [candidate];
-          setImageUrls(currentImages);
-          setNewImageUrl('');
-        }
-      } catch {
-        // let image URL validation catch invalid URL format
-      }
-    }
-
     if (name.trim().length < 2 || name.trim().length > 200) {
       errs.name = 'Product name must be between 2 and 200 characters.';
     }
@@ -188,19 +204,19 @@ export default function NewProductPage() {
     if (!lowStockThreshold.trim() || !Number.isInteger(Number(lowStockThreshold)) || Number(lowStockThreshold) < 0) {
       errs.lowStockThreshold = 'Low-stock threshold must be a non-negative whole number.';
     }
-    if (currentImages.length === 0) {
+    if (imageUrls.length === 0) {
       errs.images = 'At least one product image is required.';
-    } else if (currentImages.length > 30) {
+    } else if (imageUrls.length > 30) {
       errs.images = 'A product can have no more than 30 images.';
-    } else if (currentImages.some((imageUrl) => {
+    } else if (imageUrls.some((imageUrl) => {
       try {
         const parsed = new URL(imageUrl);
-        return parsed.protocol !== 'https:' && parsed.protocol !== 'http:';
+        return parsed.protocol !== 'https:';
       } catch {
         return true;
       }
     })) {
-      errs.images = 'Each product image must use a valid HTTP or HTTPS URL.';
+      errs.images = 'Each product image must use a valid HTTPS URL.';
     }
     if (variants.length > 100) errs.variants = 'A product can have no more than 100 variants.';
     if (description.length > 10000) errs.description = 'Description must be 10,000 characters or fewer.';
@@ -235,6 +251,10 @@ export default function NewProductPage() {
 
   const handleSubmitConfirmed = async () => {
     if (submissionInProgress.current) return;
+    if (isUploadingImages) {
+      toast.error('Images are still uploading', 'Wait for all product images to finish uploading.');
+      return;
+    }
     if (!validateForm()) {
       return;
     }
@@ -529,17 +549,18 @@ export default function NewProductPage() {
 
           {errors.images && <p className="text-xs text-rose-400 font-medium">{errors.images}</p>}
 
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <Input
-              placeholder="Paste HTTPS image URL (e.g. Unsplash, CDN)"
-              value={newImageUrl}
-              onChange={(e) => setNewImageUrl(e.target.value)}
-              className="flex-1"
+          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-950/50 p-6 text-sm text-slate-300 hover:border-emerald-500">
+            <Upload className="h-5 w-5 text-emerald-400" />
+            <span>{isUploadingImages ? 'Uploading images…' : 'Choose JPEG, PNG, or WebP images (max 10 MB each)'}</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              disabled={isUploadingImages}
+              onChange={(event) => void handleImageFiles(event)}
+              className="sr-only"
             />
-            <Button variant="secondary" type="button" onClick={addImageUrl} icon={<Plus className="w-4 h-4" />}>
-              Add Image URL
-            </Button>
-          </div>
+          </label>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
             {imageUrls.map((url, idx) => (

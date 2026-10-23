@@ -12,8 +12,9 @@ import { ConfirmDialog } from '../../../../components/ui/ConfirmDialog';
 import { useToast } from '../../../../context/ToastContext';
 import { useAuth } from '../../../../context/AuthContext';
 import { getSellerProductByIdApi, updateSellerProductApi } from '../../../../lib/api/products';
+import { uploadSellerProductImage } from '../../../../lib/product-images';
 import { ALLOWED_CATEGORIES, AllowedCategory, Product } from '../../../../types';
-import { ArrowLeft, Save, Plus, Trash2, AlertTriangle, Send } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, AlertTriangle, Send, Upload } from 'lucide-react';
 
 export default function EditProductPage() {
   const params = useParams();
@@ -38,7 +39,7 @@ export default function EditProductPage() {
   const [compareAtPrice, setCompareAtPrice] = useState('');
   const [stock, setStock] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
-  const [newImageUrl, setNewImageUrl] = useState('');
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -62,9 +63,7 @@ export default function EditProductPage() {
           setPrice(String(p.price));
           setCompareAtPrice(p.compareAtPrice ? String(p.compareAtPrice) : '');
           setStock(String(p.stock));
-          const imgs = Array.isArray(p.images)
-            ? p.images.map((img) => (typeof img === 'string' ? img : img.url))
-            : [];
+          const imgs = Array.isArray(p.images) ? p.images : [];
           setImageUrls(imgs);
         } else {
           setLoadError('Product not found or access denied.');
@@ -78,10 +77,35 @@ export default function EditProductPage() {
     loadData();
   }, [authLoading, authState, firebaseUser, productId]);
 
-  const handleAddImage = () => {
-    if (newImageUrl.trim()) {
-      setImageUrls([...imageUrls, newImageUrl.trim()]);
-      setNewImageUrl('');
+  const handleImageFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.currentTarget.files || []);
+    event.currentTarget.value = '';
+    if (files.length === 0) return;
+    if (!firebaseUser || authState !== 'signed-in') {
+      toast.error('Sign-in required', 'Sign in again before uploading product images.');
+      return;
+    }
+    if (imageUrls.length + files.length > 30) {
+      toast.error('Too many images', 'A product can have no more than 30 images.');
+      return;
+    }
+
+    setIsUploadingImages(true);
+    try {
+      const uploadedUrls: string[] = [];
+      for (const file of files) {
+        const url = await uploadSellerProductImage(firebaseUser, file);
+        uploadedUrls.push(url);
+        setImageUrls((current) => [...current, url]);
+      }
+      toast.success('Images uploaded', `${uploadedUrls.length} product image(s) are ready.`);
+    } catch (error) {
+      toast.error(
+        'Image upload failed',
+        error instanceof Error ? error.message : 'Unable to upload product images.',
+      );
+    } finally {
+      setIsUploadingImages(false);
     }
   };
 
@@ -90,6 +114,10 @@ export default function EditProductPage() {
   };
 
   const handleSaveConfirmed = async () => {
+    if (isUploadingImages) {
+      toast.error('Images are still uploading', 'Wait for all product images to finish uploading.');
+      return;
+    }
     if (!firebaseUser || authLoading || authState !== 'signed-in') {
       toast.error('Sign-in required', 'Sign in again before updating this product.');
       return;
@@ -195,10 +223,18 @@ export default function EditProductPage() {
 
           <div className="space-y-3 pt-2">
             <label className="text-xs font-semibold uppercase tracking-wider text-slate-300">Product Images</label>
-            <div className="flex space-x-2">
-              <Input placeholder="Image URL..." value={newImageUrl} onChange={(e) => setNewImageUrl(e.target.value)} className="flex-1" />
-              <Button variant="secondary" onClick={handleAddImage} icon={<Plus className="w-4 h-4" />}>Add</Button>
-            </div>
+            <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-300 hover:border-emerald-500">
+              <Upload className="h-5 w-5 text-emerald-400" />
+              <span>{isUploadingImages ? 'Uploading images…' : 'Add JPEG, PNG, or WebP images (max 10 MB each)'}</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                disabled={isUploadingImages}
+                onChange={(event) => void handleImageFiles(event)}
+                className="sr-only"
+              />
+            </label>
 
             <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
               {imageUrls.map((url, i) => (

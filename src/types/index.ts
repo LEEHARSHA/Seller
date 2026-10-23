@@ -46,13 +46,6 @@ export interface ProductSpecification {
   value: string;
 }
 
-export interface ProductImage {
-  id: string;
-  url: string;
-  isPrimary?: boolean;
-  alt?: string;
-}
-
 export interface Product {
   id: string;
   sellerId: string;
@@ -66,7 +59,7 @@ export interface Product {
   price: number;
   compareAtPrice?: number | null;
   discountPercent?: number;
-  images: string[] | ProductImage[];
+  images: string[];
   stock: number;
   lowStockThreshold?: number;
   variants?: ProductVariant[];

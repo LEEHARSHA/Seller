@@ -85,9 +85,7 @@ export default function ProductDetailPage() {
     );
   }
 
-  const images = Array.isArray(product.images)
-    ? product.images.map((img) => (typeof img === 'string' ? img : img.url))
-    : [];
+  const images = Array.isArray(product.images) ? product.images : [];
 
   return (
     <AppShell>

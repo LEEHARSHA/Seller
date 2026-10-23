@@ -68,3 +68,9 @@ npm run start
   Admins review pending products. Approved products become `status = approved` and visible in the marketplace catalog. Rejected products become `status = rejected` with a recorded `rejectionReason`.
 - **Product Edit & Resubmit (`PATCH /api/seller/products/:id`)**:
   When a seller edits any product (especially a rejected one), the backend forces status back to **`pending`** for re-approval. Sellers cannot manually approve products from the frontend.
+
+### Product image uploads
+
+Product creation and editing upload selected JPEG, PNG, or WebP files (up to 10 MB each) to the signed-in seller's Firebase Storage folder, then submit the resulting Firebase download URLs as `images: string[]` to the backend. The backend accepts new images only from the configured project bucket and the authenticated seller's own product-image path. Existing image URLs on edited products are preserved for compatibility, but pasted external URLs are no longer accepted for new uploads.
+
+The Firebase project must have the Storage bucket configured as `sellerportal-2786c.firebasestorage.app` and Firebase Storage enabled. Deploy the checked-in rules from this repository with `firebase deploy --only storage --project sellerportal-2786c`. Rules allow public reads of product image objects and authenticated writes only to each seller's own folder, for JPEG/PNG/WebP files up to 10 MB. The Seller Portal checks that each selected file decodes as a reasonably sized image before upload. Set `FIREBASE_STORAGE_BUCKET=sellerportal-2786c.firebasestorage.app` in the backend environment to validate uploaded download URLs.
