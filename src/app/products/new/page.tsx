@@ -17,20 +17,13 @@ import { useAuth } from '../../../context/AuthContext';
 import { createSellerProductApi } from '../../../lib/api/products';
 import { ALLOWED_CATEGORIES, AllowedCategory, Product } from '../../../types';
 import {
-  Upload,
   Image as ImageIcon,
-  X,
   Plus,
   Trash2,
-  CheckCircle2,
   Sparkles,
   Eye,
   Send,
-  Save,
-  Package,
   AlertCircle,
-  HelpCircle,
-  Star,
 } from 'lucide-react';
 
 const ProductBoxScene = dynamic(() => import('../../../components/3d/ProductBoxScene'), {
@@ -208,10 +201,19 @@ export default function NewProductPage() {
     const errs: Record<string, string> = {};
 
     let currentImages = [...imageUrls];
-    if (newImageUrl.trim()) {
-      const pending = newImageUrl.trim();
-      if (isValidHttpsUrl(pending) && !currentImages.includes(pending) && currentImages.length < 30) {
-        currentImages = [...currentImages, pending];
+    const pendingImageUrl = newImageUrl.trim();
+    if (pendingImageUrl) {
+      if (!isValidHttpsUrl(pendingImageUrl)) {
+        errs.images = 'Each product image must use a valid, public HTTPS URL.';
+        setUrlInputError('Image URL must be a valid, public HTTPS URL starting with https://');
+      } else if (currentImages.includes(pendingImageUrl)) {
+        errs.images = 'This image URL has already been added.';
+        setUrlInputError('This image URL has already been added.');
+      } else if (currentImages.length >= 30) {
+        errs.images = 'A product can have no more than 30 images.';
+        setUrlInputError('A product can have no more than 30 images.');
+      } else {
+        currentImages = [...currentImages, pendingImageUrl];
         setImageUrls(currentImages);
         setNewImageUrl('');
         setUrlInputError(undefined);
@@ -241,13 +243,13 @@ export default function NewProductPage() {
     if (!lowStockThreshold.trim() || !Number.isInteger(Number(lowStockThreshold)) || Number(lowStockThreshold) < 0) {
       errs.lowStockThreshold = 'Low-stock threshold must be a non-negative whole number.';
     }
-    if (currentImages.length === 0) {
+    if (!errs.images && currentImages.length === 0) {
       errs.images = 'At least one product image URL is required.';
-    } else if (currentImages.length > 30) {
+    } else if (!errs.images && currentImages.length > 30) {
       errs.images = 'A product can have no more than 30 images.';
-    } else if (currentImages.some((url) => !isValidHttpsUrl(url))) {
+    } else if (!errs.images && currentImages.some((url) => !isValidHttpsUrl(url))) {
       errs.images = 'Each product image must use a valid, public HTTPS URL.';
-    } else if (currentImages.some((url) => failedImageUrls[url])) {
+    } else if (!errs.images && currentImages.some((url) => failedImageUrls[url])) {
       errs.images = 'One or more image URLs failed to load. Please fix or remove invalid image URLs before submitting.';
     }
     if (variants.length > 100) errs.variants = 'A product can have no more than 100 variants.';
@@ -276,10 +278,6 @@ export default function NewProductPage() {
 
   const openConfirmation = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (uploadInProgress.current || isUploadingImages) {
-      toast.error('Images are still uploading', 'Wait for all product images to finish uploading.');
-      return;
-    }
     if (validateForm()) {
       setIsConfirmModalOpen(true);
     }
@@ -287,10 +285,6 @@ export default function NewProductPage() {
 
   const handleSubmitConfirmed = async () => {
     if (submissionInProgress.current) return;
-    if (uploadInProgress.current || isUploadingImages) {
-      toast.error('Images are still uploading', 'Wait for all product images to finish uploading.');
-      return;
-    }
     if (!validateForm()) {
       return;
     }

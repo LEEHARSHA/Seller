@@ -143,16 +143,34 @@ export default function EditProductPage() {
     let finalImages = [...imageUrls];
     if (newImageUrl.trim()) {
       const pending = newImageUrl.trim();
-      if (isValidHttpsUrl(pending) && !finalImages.includes(pending) && finalImages.length < 30) {
-        finalImages = [...finalImages, pending];
-        setImageUrls(finalImages);
-        setNewImageUrl('');
-        setUrlInputError(undefined);
+      if (!isValidHttpsUrl(pending)) {
+        setUrlInputError('Image URL must be a valid, public HTTPS URL starting with https://');
+        toast.error('Invalid image URL', 'Each product image must use a valid HTTPS URL.');
+        return;
       }
+      if (finalImages.includes(pending)) {
+        setUrlInputError('This image URL has already been added.');
+        toast.error('Duplicate image URL', 'This product image URL has already been added.');
+        return;
+      }
+      if (finalImages.length >= 30) {
+        setUrlInputError('A product can have no more than 30 images.');
+        toast.error('Image limit reached', 'A product can have no more than 30 images.');
+        return;
+      }
+      finalImages = [...finalImages, pending];
+      setImageUrls(finalImages);
+      setNewImageUrl('');
+      setUrlInputError(undefined);
     }
 
     if (finalImages.length === 0) {
       toast.error('Image required', 'Provide at least one valid HTTPS product image URL.');
+      return;
+    }
+
+    if (finalImages.length > 30) {
+      toast.error('Image limit reached', 'A product can have no more than 30 images.');
       return;
     }
 
