@@ -39,7 +39,7 @@ export default function EditProductPage() {
   const [stock, setStock] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [newImageUrl, setNewImageUrl] = useState('');
-  const [urlInputError, setUrlInputError] = useState<string | null>(null);
+  const [urlInputError, setUrlInputError] = useState<string | undefined>(undefined);
   const [failedImageUrls, setFailedImageUrls] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -111,7 +111,7 @@ export default function EditProductPage() {
 
     setImageUrls((current) => [...current, trimmed]);
     setNewImageUrl('');
-    setUrlInputError(null);
+    setUrlInputError(undefined);
   };
 
   const handleRemoveImage = (index: number) => {
@@ -147,7 +147,7 @@ export default function EditProductPage() {
         finalImages = [...finalImages, pending];
         setImageUrls(finalImages);
         setNewImageUrl('');
-        setUrlInputError(null);
+        setUrlInputError(undefined);
       }
     }
 
@@ -287,7 +287,7 @@ export default function EditProductPage() {
                   value={newImageUrl}
                   onChange={(e) => {
                     setNewImageUrl(e.target.value);
-                    if (urlInputError) setUrlInputError(null);
+                    if (urlInputError) setUrlInputError(undefined);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -295,7 +295,7 @@ export default function EditProductPage() {
                       handleAddImageUrl();
                     }
                   }}
-                  error={urlInputError}
+                  error={urlInputError ?? undefined}
                 />
               </div>
               <div className="sm:self-end pt-1 sm:pt-0">

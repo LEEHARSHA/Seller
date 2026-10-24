@@ -75,7 +75,7 @@ export default function NewProductPage() {
   // Section 5: Images
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [newImageUrl, setNewImageUrl] = useState('');
-  const [urlInputError, setUrlInputError] = useState<string | null>(null);
+  const [urlInputError, setUrlInputError] = useState<string | undefined>(undefined);
   const [failedImageUrls, setFailedImageUrls] = useState<Record<string, boolean>>({});
 
   // Section 6: Variants
@@ -144,7 +144,7 @@ export default function NewProductPage() {
 
     setImageUrls((current) => [...current, trimmed]);
     setNewImageUrl('');
-    setUrlInputError(null);
+    setUrlInputError(undefined);
     setErrors((current) => {
       const remaining = { ...current };
       delete remaining.images;
@@ -214,7 +214,7 @@ export default function NewProductPage() {
         currentImages = [...currentImages, pending];
         setImageUrls(currentImages);
         setNewImageUrl('');
-        setUrlInputError(null);
+        setUrlInputError(undefined);
       }
     }
 
@@ -595,7 +595,7 @@ export default function NewProductPage() {
                 value={newImageUrl}
                 onChange={(e) => {
                   setNewImageUrl(e.target.value);
-                  if (urlInputError) setUrlInputError(null);
+                  if (urlInputError) setUrlInputError(undefined);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -603,7 +603,7 @@ export default function NewProductPage() {
                     handleAddImageUrl();
                   }
                 }}
-                error={urlInputError}
+                error={urlInputError ?? undefined}
               />
             </div>
             <div className="sm:self-end pt-1 sm:pt-0">
