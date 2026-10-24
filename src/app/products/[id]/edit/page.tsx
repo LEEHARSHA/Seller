@@ -12,6 +12,7 @@ import { ConfirmDialog } from '../../../../components/ui/ConfirmDialog';
 import { useToast } from '../../../../context/ToastContext';
 import { useAuth } from '../../../../context/AuthContext';
 import { getSellerProductByIdApi, updateSellerProductApi } from '../../../../lib/api/products';
+import { isValidHttpsProductImageUrl } from '../../../../lib/product-image-url';
 import { ALLOWED_CATEGORIES, AllowedCategory } from '../../../../types';
 import { ArrowLeft, Trash2, AlertTriangle, Send, Plus, AlertCircle, Image as ImageIcon } from 'lucide-react';
 
@@ -78,15 +79,6 @@ export default function EditProductPage() {
     loadData();
   }, [authLoading, authState, firebaseUser, productId]);
 
-  const isValidHttpsUrl = (urlString: string) => {
-    try {
-      const parsed = new URL(urlString.trim());
-      return parsed.protocol === 'https:' && parsed.hostname.length > 0;
-    } catch {
-      return false;
-    }
-  };
-
   const handleAddImageUrl = () => {
     const trimmed = newImageUrl.trim();
     if (!trimmed) {
@@ -94,8 +86,8 @@ export default function EditProductPage() {
       return;
     }
 
-    if (!isValidHttpsUrl(trimmed)) {
-      setUrlInputError('Image URL must be a valid, public HTTPS URL starting with https://');
+    if (!isValidHttpsProductImageUrl(trimmed)) {
+      setUrlInputError('Image URL must be a valid HTTPS URL without embedded username or password.');
       return;
     }
 
@@ -143,8 +135,8 @@ export default function EditProductPage() {
     let finalImages = [...imageUrls];
     if (newImageUrl.trim()) {
       const pending = newImageUrl.trim();
-      if (!isValidHttpsUrl(pending)) {
-        setUrlInputError('Image URL must be a valid, public HTTPS URL starting with https://');
+      if (!isValidHttpsProductImageUrl(pending)) {
+        setUrlInputError('Image URL must be a valid HTTPS URL without embedded username or password.');
         toast.error('Invalid image URL', 'Each product image must use a valid HTTPS URL.');
         return;
       }
@@ -174,7 +166,7 @@ export default function EditProductPage() {
       return;
     }
 
-    if (finalImages.some((url) => !isValidHttpsUrl(url))) {
+    if (finalImages.some((url) => !isValidHttpsProductImageUrl(url))) {
       toast.error('Invalid image URL', 'Each product image must use a valid HTTPS URL.');
       return;
     }
@@ -350,6 +342,7 @@ export default function EditProductPage() {
                         />
                       ) : (
                         <div className="p-3 text-center space-y-1">
+                          <img src="/product-image-fallback.svg" alt="" className="w-12 h-12 mx-auto" />
                           <AlertCircle className="w-6 h-6 text-rose-400 mx-auto" />
                           <p className="text-[11px] font-semibold text-rose-300">Failed to load</p>
                           <p className="text-[10px] text-slate-400 break-all line-clamp-2 px-1">{url}</p>

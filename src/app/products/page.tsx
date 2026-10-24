@@ -110,7 +110,7 @@ function ProductsContent() {
         <div className="flex items-center space-x-3 max-w-xs">
           <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700/80 overflow-hidden shrink-0">
             {typeof p.images[0] === 'string' ? (
-              <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" />
+              <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = '/product-image-fallback.svg'; }} />
             ) : (
               <Package className="w-6 h-6 text-slate-500 m-auto mt-3" />
             )}
@@ -299,7 +299,7 @@ function ProductsContent() {
                   <div className="flex items-center space-x-3">
                     <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden shrink-0">
                       {typeof p.images[0] === 'string' ? (
-                        <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" />
+                        <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = '/product-image-fallback.svg'; }} />
                       ) : (
                         <Package className="w-6 h-6 text-slate-500 m-auto mt-3" />
                       )}

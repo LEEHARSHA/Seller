@@ -1,6 +1,7 @@
 import type { User } from 'firebase/auth';
 import { Product, ProductStatus } from '../../types';
 import { fetchApi } from './client';
+import { isValidHttpsProductImageUrl } from '../product-image-url';
 
 export async function getSellerProductsApi(
   user: User,
@@ -55,15 +56,10 @@ export async function createSellerProductApi(
 
   if (
     !images?.length
-    || images.some((imageUrl) => {
-      try {
-        return new URL(imageUrl).protocol !== 'https:';
-      } catch {
-        return true;
-      }
-    })
+    || images.length > 30
+    || images.some((imageUrl) => !isValidHttpsProductImageUrl(imageUrl))
   ) {
-    throw new Error('Provide at least one valid HTTPS product image URL before submitting.');
+    throw new Error('Provide 1 to 30 valid HTTPS product image URLs before submitting.');
   }
 
   const res = await fetchApi<{ success: boolean; product: Product }>('/api/seller/products', {

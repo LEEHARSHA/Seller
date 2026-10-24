@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -15,7 +15,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { useToast } from '../../../context/ToastContext';
 import { useAuth } from '../../../context/AuthContext';
 import { createSellerProductApi } from '../../../lib/api/products';
-import { uploadSellerProductImage } from '../../../lib/product-images';
+import { isValidHttpsProductImageUrl } from '../../../lib/product-image-url';
 import { ALLOWED_CATEGORIES, AllowedCategory, Product } from '../../../types';
 import {
   Image as ImageIcon,
@@ -67,11 +67,10 @@ export default function NewProductPage() {
   const [lowStockThreshold, setLowStockThreshold] = useState<string>('10');
 
   // Section 5: Images
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
-  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
-  const [failedImagePreviews, setFailedImagePreviews] = useState<Record<string, boolean>>({});
-  const [uploadProgress, setUploadProgress] = useState<{ completed: number; total: number; percentage: number } | null>(null);
-  const [uploadedImages, setUploadedImages] = useState<Array<{ file: File; url: string }>>([]);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [newImageUrl, setNewImageUrl] = useState('');
+  const [urlInputError, setUrlInputError] = useState<string | undefined>(undefined);
+  const [failedImageUrls, setFailedImageUrls] = useState<Record<string, boolean>>({});
 
   // Section 6: Variants
   const [variants, setVariants] = useState<Array<{ id: string; title: string; stock: number }>>([]);
@@ -106,41 +105,27 @@ export default function NewProductPage() {
     return 0;
   };
 
-  useEffect(() => {
-    const previews = selectedImages.map((file) => URL.createObjectURL(file));
-    setImagePreviewUrls(previews);
-    return () => previews.forEach((url) => URL.revokeObjectURL(url));
-  }, [selectedImages]);
-
-  const handleSelectImages = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = '';
-    if (files.length === 0) return;
-
-    const nextFiles = [...selectedImages];
-    for (const file of files) {
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-        toast.error('Unsupported image type', `"${file.name}" is not a JPEG, PNG, or WebP image.`);
-        return;
-      }
-      if (file.size === 0 || file.size > 10 * 1024 * 1024) {
-        toast.error('Invalid image size', `"${file.name}" must be larger than 0 bytes and no larger than 10 MB.`);
-        return;
-      }
-      if (nextFiles.length >= 30) {
-        toast.error('Image limit reached', 'A product can have no more than 30 images.');
-        return;
-      }
-      if (!nextFiles.some((existing) => (
-        existing.name === file.name
-        && existing.size === file.size
-        && existing.lastModified === file.lastModified
-      ))) {
-        nextFiles.push(file);
-      }
+  const handleAddImageUrl = () => {
+    const trimmed = newImageUrl.trim();
+    if (!trimmed) {
+      setUrlInputError('Enter a product image URL beginning with https://.');
+      return;
     }
-    setSelectedImages(nextFiles);
-    setFailedImagePreviews({});
+    if (!isValidHttpsProductImageUrl(trimmed)) {
+      setUrlInputError('Enter a valid HTTPS image URL without embedded username or password.');
+      return;
+    }
+    if (imageUrls.includes(trimmed)) {
+      setUrlInputError('This image URL has already been added.');
+      return;
+    }
+    if (imageUrls.length >= 30) {
+      setUrlInputError('A product can have no more than 30 images.');
+      return;
+    }
+    setImageUrls((current) => [...current, trimmed]);
+    setNewImageUrl('');
+    setUrlInputError(undefined);
     setErrors((current) => {
       const remaining = { ...current };
       delete remaining.images;
@@ -149,10 +134,19 @@ export default function NewProductPage() {
   };
 
   const handleRemoveImage = (index: number) => {
-    const removedFile = selectedImages[index];
-    setSelectedImages((current) => current.filter((_, i) => i !== index));
-    setUploadedImages((current) => current.filter(({ file }) => file !== removedFile));
-    setFailedImagePreviews({});
+    const removedUrl = imageUrls[index];
+    setImageUrls((current) => current.filter((_, i) => i !== index));
+    if (removedUrl) {
+      setFailedImageUrls((current) => {
+        const remaining = { ...current };
+        delete remaining[removedUrl];
+        return remaining;
+      });
+    }
+  };
+
+  const handleImageLoadError = (url: string) => {
+    setFailedImageUrls((current) => ({ ...current, [url]: true }));
   };
 
   const addVariant = () => {
@@ -208,12 +202,16 @@ export default function NewProductPage() {
     if (!lowStockThreshold.trim() || !Number.isInteger(Number(lowStockThreshold)) || Number(lowStockThreshold) < 0) {
       errs.lowStockThreshold = 'Low-stock threshold must be a non-negative whole number.';
     }
-    if (selectedImages.length === 0) {
-      errs.images = 'Select at least one product image to upload.';
-    } else if (selectedImages.length > 30) {
+    if (newImageUrl.trim()) {
+      errs.images = 'Click Add image URL to include the URL before submitting.';
+    } else if (imageUrls.length === 0) {
+      errs.images = 'Add at least one product image URL beginning with https://.';
+    } else if (imageUrls.length > 30) {
       errs.images = 'A product can have no more than 30 images.';
-    } else if (imagePreviewUrls.some((url) => failedImagePreviews[url])) {
-      errs.images = 'One or more selected images could not be previewed. Remove the failed image and select it again.';
+    } else if (imageUrls.some((url) => !isValidHttpsProductImageUrl(url))) {
+      errs.images = 'Each product image must be a valid HTTPS URL.';
+    } else if (imageUrls.some((url) => failedImageUrls[url])) {
+      errs.images = 'One or more image URLs could not load. Fix or remove those URLs before submitting.';
     }
     if (variants.length > 100) errs.variants = 'A product can have no more than 100 variants.';
     if (description.length > 10000) errs.description = 'Description must be 10,000 characters or fewer.';
@@ -262,53 +260,7 @@ export default function NewProductPage() {
 
     submissionInProgress.current = true;
     setIsSubmitting(true);
-    let submissionStage = 'uploading images';
     try {
-      if (!firebaseUser.uid) {
-        throw new Error('Your signed-in Firebase account does not have a UID. Sign in again before submitting.');
-      }
-
-      const totalBytes = selectedImages.reduce((total, file) => total + file.size, 0);
-      let transferredBytes = uploadedImages
-        .filter(({ file }) => selectedImages.includes(file))
-        .reduce((total, image) => total + image.file.size, 0);
-      setUploadProgress({
-        completed: uploadedImages.filter(({ file }) => selectedImages.includes(file)).length,
-        total: selectedImages.length,
-        percentage: totalBytes ? Math.round((transferredBytes / totalBytes) * 100) : 0,
-      });
-
-      const uploadedForSubmission: Array<{ file: File; url: string }> = [];
-      for (const file of selectedImages) {
-        const existingUpload = uploadedImages.find((image) => image.file === file);
-        if (existingUpload) {
-          uploadedForSubmission.push(existingUpload);
-          continue;
-        }
-
-        const url = await uploadSellerProductImage(firebaseUser, file, ({ bytesTransferred }) => {
-          const percentage = totalBytes
-            ? Math.round(((transferredBytes + bytesTransferred) / totalBytes) * 100)
-            : 0;
-          setUploadProgress({
-            completed: uploadedForSubmission.length,
-            total: selectedImages.length,
-            percentage,
-          });
-        });
-        const uploadedImage = { file, url };
-        uploadedForSubmission.push(uploadedImage);
-        setUploadedImages((current) => [...current.filter((image) => image.file !== file), uploadedImage]);
-        transferredBytes += file.size;
-        setUploadProgress({
-          completed: uploadedForSubmission.length,
-          total: selectedImages.length,
-          percentage: totalBytes ? Math.round((transferredBytes / totalBytes) * 100) : 100,
-        });
-      }
-
-      if (!validateForm()) return;
-      submissionStage = 'saving the product';
       const specObj: Record<string, string> = {};
       specs.forEach((s) => {
         specObj[s.key] = s.value;
@@ -327,7 +279,7 @@ export default function NewProductPage() {
         discountPercent: calculateDiscount(),
         stock: parseInt(stock),
         lowStockThreshold: parseInt(lowStockThreshold),
-        images: uploadedForSubmission.map((image) => image.url),
+        images: imageUrls,
         variants: variants.map((v) => ({
           id: v.id,
           title: v.title,
@@ -357,11 +309,10 @@ export default function NewProductPage() {
         return;
       }
       const message = err instanceof Error ? err.message : 'The product could not be submitted.';
-      toast.error(`Product ${submissionStage} failed`, message);
+      toast.error('Product submission failed', message);
     } finally {
       submissionInProgress.current = false;
       setIsSubmitting(false);
-      setUploadProgress(null);
     }
   };
 
@@ -587,22 +538,45 @@ export default function NewProductPage() {
               <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">5</span>
               Product Media & Images
             </h3>
-            <span className="text-xs text-slate-400">Seller-owned Firebase Storage</span>
+            <span className="text-xs text-slate-400">HTTPS Image URLs</span>
           </div>
 
           <p className="text-xs text-slate-400 leading-relaxed">
-            Select JPEG, PNG, or WebP images up to 10 MB each. Images upload to your seller-owned Firebase Storage folder before the product is sent for review.
+            Paste direct HTTPS image URLs. Images are previewed here and saved with the product for admin review.
           </p>
 
-          <Input
-            label="Product Images"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            disabled={isSubmitting}
-            onChange={handleSelectImages}
-            helperText="Choose up to 30 images. Your images are uploaded securely when you confirm submission."
-          />
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+            <div className="flex-1 w-full">
+              <Input
+                label="Image URL"
+                type="url"
+                placeholder="https://example.com/product-image.jpg"
+                value={newImageUrl}
+                disabled={isSubmitting}
+                onChange={(event) => {
+                  setNewImageUrl(event.target.value);
+                  if (urlInputError) setUrlInputError(undefined);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleAddImageUrl();
+                  }
+                }}
+                error={urlInputError}
+                helperText="Use a direct image URL beginning with https://."
+              />
+            </div>
+            <Button
+              variant="secondary"
+              type="button"
+              disabled={isSubmitting}
+              onClick={handleAddImageUrl}
+              icon={<Plus className="w-4 h-4" />}
+            >
+              {imageUrls.length > 0 ? 'Add another image URL' : 'Add image URL'}
+            </Button>
+          </div>
 
           {errors.images && (
             <p role="alert" className="text-xs text-rose-400 font-medium pt-1">
@@ -611,34 +585,33 @@ export default function NewProductPage() {
           )}
 
           {/* Added Image Previews */}
-          {selectedImages.length > 0 ? (
+          {imageUrls.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3">
-              {selectedImages.map((file, idx) => {
-                const previewUrl = imagePreviewUrls[idx];
-                const hasError = previewUrl ? failedImagePreviews[previewUrl] : false;
+              {imageUrls.map((url, idx) => {
+                const hasError = failedImageUrls[url];
                 return (
                   <div
-                    key={`${file.name}-${file.lastModified}-${idx}`}
+                    key={`${url}-${idx}`}
                     className={`relative group rounded-xl bg-slate-950 border overflow-hidden aspect-square flex flex-col items-center justify-center ${
                       hasError ? 'border-rose-500/60 bg-rose-950/20' : 'border-slate-800'
                     }`}
                   >
-                    {!hasError && previewUrl ? (
+                    {!hasError ? (
                       <img
-                        src={previewUrl}
+                        src={url}
                         alt={`Product ${idx + 1}`}
                         className="w-full h-full object-cover"
-                        onError={() => setFailedImagePreviews((current) => ({ ...current, [previewUrl]: true }))}
+                        onError={() => handleImageLoadError(url)}
                       />
                     ) : (
                       <div className="p-3 text-center space-y-1">
-                        <AlertCircle className="w-6 h-6 text-rose-400 mx-auto" />
-                        <p className="text-[11px] font-semibold text-rose-300">Preview unavailable</p>
-                        <p className="text-[10px] text-slate-400 break-all line-clamp-2 px-1">{file.name}</p>
+                        <img src="/product-image-fallback.svg" alt="" className="w-12 h-12 mx-auto" />
+                        <p className="text-[11px] font-semibold text-rose-300">Image could not load</p>
+                        <p className="text-[10px] text-slate-400 break-all line-clamp-2 px-1">{url}</p>
                       </div>
                     )}
 
-                    {idx === 0 && !hasError && previewUrl && (
+                    {idx === 0 && !hasError && (
                       <span className="absolute top-2 left-2 bg-emerald-500 text-slate-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow">
                         Primary
                       </span>
@@ -648,7 +621,7 @@ export default function NewProductPage() {
                       type="button"
                       onClick={() => handleRemoveImage(idx)}
                       disabled={isSubmitting}
-                      title="Remove image"
+                      title="Remove image URL"
                       className="absolute top-2 right-2 p-1.5 bg-rose-950/90 text-rose-300 hover:text-white rounded-lg shadow transition-opacity"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -660,29 +633,10 @@ export default function NewProductPage() {
           ) : (
             <div className="p-6 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center space-y-2">
               <ImageIcon className="w-8 h-8 text-slate-600 mx-auto" />
-              <p className="text-xs text-slate-400">No product images selected yet.</p>
+              <p className="text-xs text-slate-400">No image URLs added yet.</p>
               <p className="text-[11px] text-slate-500">
-                Select at least one image file before submitting the product.
+                Enter a direct HTTPS image URL and add it before submitting.
               </p>
-            </div>
-          )}
-
-          {uploadProgress && (
-            <div role="status" aria-live="polite" className="space-y-2 pt-2">
-              <div className="flex justify-between text-xs text-slate-300">
-                <span>
-                  {uploadProgress.percentage === 100
-                    ? 'Images uploaded. Saving product for review...'
-                    : `Uploading images (${uploadProgress.completed} of ${uploadProgress.total} complete)`}
-                </span>
-                <span>{uploadProgress.percentage}%</span>
-              </div>
-              <progress
-                className="h-2 w-full accent-emerald-500"
-                value={uploadProgress.percentage}
-                max={100}
-                aria-label="Product image upload progress"
-              />
             </div>
           )}
         </Card>
@@ -805,8 +759,14 @@ export default function NewProductPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row gap-6">
             <div className="w-full md:w-1/2 aspect-square rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden">
-              {imagePreviewUrls[0] ? (
-                <img src={imagePreviewUrls[0]} alt="Product preview" className="w-full h-full object-cover" />
+              {imageUrls[0] && !failedImageUrls[imageUrls[0]] ? (
+                <img src={imageUrls[0]} alt="Product preview" className="w-full h-full object-cover" onError={() => handleImageLoadError(imageUrls[0])} />
+              ) : failedImageUrls[imageUrls[0]] ? (
+                <div role="img" aria-label="Product image preview unavailable" className="flex h-full flex-col items-center justify-center gap-2 text-rose-300">
+                  <img src="/product-image-fallback.svg" alt="" className="h-16 w-16" />
+                  <AlertCircle className="h-8 w-8" />
+                  <span className="text-xs">Image could not load</span>
+                </div>
               ) : (
                 <div className="flex h-full items-center justify-center text-slate-500">
                   <ImageIcon className="h-10 w-10" />

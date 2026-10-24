@@ -150,7 +150,7 @@ export default function ProductDetailPage() {
           <div className="space-y-4">
             <div className="aspect-square rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden">
               {images[selectedImageIndex] ? (
-                <img src={images[selectedImageIndex]} alt={product.name} className="w-full h-full object-cover" />
+                <img src={images[selectedImageIndex]} alt={product.name} className="w-full h-full object-cover" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = '/product-image-fallback.svg'; }} />
               ) : (
                 <div className="flex h-full items-center justify-center text-slate-500">
                   <Package className="h-12 w-12" />
@@ -168,7 +168,7 @@ export default function ProductDetailPage() {
                       selectedImageIndex === idx ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-slate-800'
                     }`}
                   >
-                    <img src={img} alt="Thumb" className="w-full h-full object-cover" />
+                    <img src={img} alt="Thumb" className="w-full h-full object-cover" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = '/product-image-fallback.svg'; }} />
                   </button>
                 ))}
               </div>
