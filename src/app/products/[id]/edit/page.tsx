@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { AppShell } from '../../../../components/layout/AppShell';
 import { Card } from '../../../../components/ui/Card';
@@ -12,9 +12,8 @@ import { ConfirmDialog } from '../../../../components/ui/ConfirmDialog';
 import { useToast } from '../../../../context/ToastContext';
 import { useAuth } from '../../../../context/AuthContext';
 import { getSellerProductByIdApi, updateSellerProductApi } from '../../../../lib/api/products';
-import { uploadSellerProductImage } from '../../../../lib/product-images';
-import { ALLOWED_CATEGORIES, AllowedCategory, Product } from '../../../../types';
-import { ArrowLeft, Save, Trash2, AlertTriangle, Send, Upload } from 'lucide-react';
+import { ALLOWED_CATEGORIES, AllowedCategory } from '../../../../types';
+import { ArrowLeft, Trash2, AlertTriangle, Send, Plus, AlertCircle, Image as ImageIcon } from 'lucide-react';
 
 export default function EditProductPage() {
   const params = useParams();
@@ -39,15 +38,10 @@ export default function EditProductPage() {
   const [compareAtPrice, setCompareAtPrice] = useState('');
   const [stock, setStock] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
-  const [isUploadingImages, setIsUploadingImages] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadFilePosition, setUploadFilePosition] = useState(0);
-  const [uploadFileCount, setUploadFileCount] = useState(0);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const uploadInProgress = useRef(false);
-  const uploadController = useRef<AbortController | null>(null);
+  const [newImageUrl, setNewImageUrl] = useState('');
+  const [urlInputError, setUrlInputError] = useState<string | null>(null);
+  const [failedImageUrls, setFailedImageUrls] = useState<Record<string, boolean>>({});
 
-  useEffect(() => () => uploadController.current?.abort(), []);
   useEffect(() => {
     async function loadData() {
       if (authLoading) return;
@@ -84,80 +78,94 @@ export default function EditProductPage() {
     loadData();
   }, [authLoading, authState, firebaseUser, productId]);
 
-  const handleImageFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.currentTarget.files || []);
-    event.currentTarget.value = '';
-    if (files.length === 0) return;
-    if (uploadInProgress.current) return;
-    if (!firebaseUser || authState !== 'signed-in') {
-      toast.error('Sign-in required', 'Sign in again before uploading product images.');
-      return;
-    }
-    if (imageUrls.length + files.length > 30) {
-      toast.error('Too many images', 'A product can have no more than 30 images.');
-      return;
-    }
-
-    const invalidFile = files.find((file) =>
-      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
-      || !file.size
-      || file.size > 10 * 1024 * 1024,
-    );
-    if (invalidFile) {
-      const message = invalidFile.size > 10 * 1024 * 1024
-        ? 'Each image must be smaller than 10 MB.'
-        : 'Use a JPEG, PNG, or WebP image.';
-      setUploadError(message);
-      toast.error('Image upload failed', message);
-      return;
-    }
-
-    uploadInProgress.current = true;
-    const controller = new AbortController();
-    uploadController.current = controller;
-    setIsUploadingImages(true);
-    setUploadProgress(0);
-    setUploadFilePosition(0);
-    setUploadFileCount(files.length);
-    setUploadError(null);
+  const isValidHttpsUrl = (urlString: string) => {
     try {
-      const uploadedUrls: string[] = [];
-      for (let index = 0; index < files.length; index += 1) {
-        const file = files[index];
-        setUploadFilePosition(index + 1);
-        setUploadProgress(0);
-        const url = await uploadSellerProductImage(firebaseUser, file, {
-          onProgress: ({ percentage }) => setUploadProgress(percentage),
-          signal: controller.signal,
-        });
-        uploadedUrls.push(url);
-        setImageUrls((current) => [...current, url]);
-      }
-      toast.success('Images uploaded', `${uploadedUrls.length} product image(s) are ready.`);
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      const message = error instanceof Error ? error.message : 'Unable to upload product images.';
-      setUploadError(message);
-      toast.error(
-        'Image upload failed',
-        message,
-      );
-    } finally {
-      uploadInProgress.current = false;
-      uploadController.current = null;
-      if (!controller.signal.aborted) setIsUploadingImages(false);
+      const parsed = new URL(urlString.trim());
+      return parsed.protocol === 'https:' && parsed.hostname.length > 0;
+    } catch {
+      return false;
     }
+  };
+
+  const handleAddImageUrl = () => {
+    const trimmed = newImageUrl.trim();
+    if (!trimmed) {
+      setUrlInputError('Please enter a product image URL.');
+      return;
+    }
+
+    if (!isValidHttpsUrl(trimmed)) {
+      setUrlInputError('Image URL must be a valid, public HTTPS URL starting with https://');
+      return;
+    }
+
+    if (imageUrls.includes(trimmed)) {
+      setUrlInputError('This image URL has already been added.');
+      return;
+    }
+
+    if (imageUrls.length >= 30) {
+      setUrlInputError('A product can have no more than 30 images.');
+      return;
+    }
+
+    setImageUrls((current) => [...current, trimmed]);
+    setNewImageUrl('');
+    setUrlInputError(null);
   };
 
   const handleRemoveImage = (index: number) => {
-    setImageUrls(imageUrls.filter((_, i) => i !== index));
+    const targetUrl = imageUrls[index];
+    setImageUrls((current) => current.filter((_, i) => i !== index));
+    if (targetUrl) {
+      setFailedImageUrls((current) => {
+        const next = { ...current };
+        delete next[targetUrl];
+        return next;
+      });
+    }
+  };
+
+  const handleImageLoadError = (url: string) => {
+    setFailedImageUrls((current) => ({ ...current, [url]: true }));
+  };
+
+  const handleImageLoadSuccess = (url: string) => {
+    setFailedImageUrls((current) => {
+      if (!current[url]) return current;
+      const next = { ...current };
+      delete next[url];
+      return next;
+    });
   };
 
   const handleSaveConfirmed = async () => {
-    if (uploadInProgress.current || isUploadingImages) {
-      toast.error('Images are still uploading', 'Wait for all product images to finish uploading.');
+    let finalImages = [...imageUrls];
+    if (newImageUrl.trim()) {
+      const pending = newImageUrl.trim();
+      if (isValidHttpsUrl(pending) && !finalImages.includes(pending) && finalImages.length < 30) {
+        finalImages = [...finalImages, pending];
+        setImageUrls(finalImages);
+        setNewImageUrl('');
+        setUrlInputError(null);
+      }
+    }
+
+    if (finalImages.length === 0) {
+      toast.error('Image required', 'Provide at least one valid HTTPS product image URL.');
       return;
     }
+
+    if (finalImages.some((url) => !isValidHttpsUrl(url))) {
+      toast.error('Invalid image URL', 'Each product image must use a valid HTTPS URL.');
+      return;
+    }
+
+    if (finalImages.some((url) => failedImageUrls[url])) {
+      toast.error('Image load failed', 'One or more image URLs failed to load. Fix or remove invalid image URLs.');
+      return;
+    }
+
     if (!firebaseUser || authLoading || authState !== 'signed-in') {
       toast.error('Sign-in required', 'Sign in again before updating this product.');
       return;
@@ -175,7 +183,7 @@ export default function EditProductPage() {
         price: parseFloat(price),
         compareAtPrice: compareAtPrice ? parseFloat(compareAtPrice) : null,
         stock: parseInt(stock),
-        images: imageUrls,
+        images: finalImages,
       });
 
       setIsConfirmOpen(false);
@@ -205,7 +213,7 @@ export default function EditProductPage() {
         <div role="alert" className="mx-auto max-w-4xl rounded-xl border border-rose-500/30 bg-rose-950/40 p-6 text-sm text-rose-200">
           Product data is unavailable: {loadError}
           <div className="mt-4">
-            <Button variant="outline" onClick={() => router.push('/products')}>Back to Products</Button>
+            <Button variant="outline" type="button" onClick={() => router.push('/products')}>Back to Products</Button>
           </div>
         </div>
       </AppShell>
@@ -216,10 +224,10 @@ export default function EditProductPage() {
     <AppShell>
       <div className="space-y-8 max-w-4xl mx-auto">
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-          <Button variant="ghost" onClick={() => router.push(`/products/${productId}`)} icon={<ArrowLeft className="w-4 h-4" />}>
+          <Button variant="ghost" type="button" onClick={() => router.push(`/products/${productId}`)} icon={<ArrowLeft className="w-4 h-4" />}>
             Cancel Edit
           </Button>
-          <Button variant="primary" onClick={() => setIsConfirmOpen(true)} icon={<Send className="w-4 h-4" />}>
+          <Button variant="primary" type="button" onClick={() => setIsConfirmOpen(true)} icon={<Send className="w-4 h-4" />}>
             Resubmit for Review
           </Button>
         </div>
@@ -261,51 +269,102 @@ export default function EditProductPage() {
 
           <Textarea label="Product Description" rows={4} value={description} onChange={(e) => setDescription(e.target.value)} />
 
-          <div className="space-y-3 pt-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-300">Product Images</label>
-            {uploadError && <p role="alert" className="text-xs text-rose-400 font-medium">{uploadError}</p>}
-            <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-700 bg-slate-950/50 p-4 text-sm text-slate-300 hover:border-emerald-500">
-              <Upload className="h-5 w-5 text-emerald-400" />
-              <span>
-                {isUploadingImages
-                  ? `Uploading image ${uploadFilePosition} of ${uploadFileCount}… ${uploadProgress}%`
-                  : 'Add JPEG, PNG, or WebP images (max 10 MB each)'}
-              </span>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                disabled={isUploadingImages}
-                onChange={(event) => void handleImageFiles(event)}
-                className="sr-only"
-              />
-            </label>
-            {isUploadingImages && (
-              <div
-                role="progressbar"
-                aria-label={`Uploading image ${uploadFilePosition} of ${uploadFileCount}`}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={uploadProgress}
-                className="h-2 overflow-hidden rounded-full bg-slate-800"
-              >
-                <div
-                  className="h-full rounded-full bg-emerald-500 transition-[width]"
-                  style={{ width: `${uploadProgress}%` }}
+          <div className="space-y-3 pt-2 border-t border-slate-800">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-300">Product Images</label>
+              <span className="text-xs text-slate-400">Direct Public Image URLs</span>
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Provide direct HTTPS image URLs for your product. Image URLs must be publicly accessible without requiring login or authentication.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex-1 w-full">
+                <Input
+                  label="Product Image URL"
+                  placeholder="https://example.com/product-image.jpg"
+                  value={newImageUrl}
+                  onChange={(e) => {
+                    setNewImageUrl(e.target.value);
+                    if (urlInputError) setUrlInputError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddImageUrl();
+                    }
+                  }}
+                  error={urlInputError}
                 />
               </div>
-            )}
-
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
-              {imageUrls.map((url, i) => (
-                <div key={i} className="relative group rounded-xl bg-slate-950 border border-slate-800 overflow-hidden aspect-square">
-                  <img src={url} alt="Thumb" className="w-full h-full object-cover" />
-                  <button onClick={() => handleRemoveImage(i)} className="absolute top-1 right-1 p-1 bg-rose-950 text-rose-300 rounded">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+              <div className="sm:self-end pt-1 sm:pt-0">
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={handleAddImageUrl}
+                  icon={<Plus className="w-4 h-4" />}
+                >
+                  Add Image URL
+                </Button>
+              </div>
             </div>
+
+            {/* Added Image Previews */}
+            {imageUrls.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3">
+                {imageUrls.map((url, idx) => {
+                  const hasError = failedImageUrls[url];
+                  return (
+                    <div
+                      key={`${url}-${idx}`}
+                      className={`relative group rounded-xl bg-slate-950 border overflow-hidden aspect-square flex flex-col items-center justify-center ${
+                        hasError ? 'border-rose-500/60 bg-rose-950/20' : 'border-slate-800'
+                      }`}
+                    >
+                      {!hasError ? (
+                        <img
+                          src={url}
+                          alt={`Product ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={() => handleImageLoadError(url)}
+                          onLoad={() => handleImageLoadSuccess(url)}
+                        />
+                      ) : (
+                        <div className="p-3 text-center space-y-1">
+                          <AlertCircle className="w-6 h-6 text-rose-400 mx-auto" />
+                          <p className="text-[11px] font-semibold text-rose-300">Failed to load</p>
+                          <p className="text-[10px] text-slate-400 break-all line-clamp-2 px-1">{url}</p>
+                        </div>
+                      )}
+
+                      {idx === 0 && !hasError && (
+                        <span className="absolute top-2 left-2 bg-emerald-500 text-slate-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow">
+                          Primary
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(idx)}
+                        title="Remove image URL"
+                        className="absolute top-2 right-2 p-1.5 bg-rose-950/90 text-rose-300 hover:text-white rounded-lg shadow transition-opacity"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-6 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center space-y-2">
+                <ImageIcon className="w-8 h-8 text-slate-600 mx-auto" />
+                <p className="text-xs text-slate-400">No image URLs added yet.</p>
+                <p className="text-[11px] text-slate-500">
+                  Enter an HTTPS image URL above and click &quot;Add Image URL&quot;. At least one product image is required.
+                </p>
+              </div>
+            )}
           </div>
         </Card>
 

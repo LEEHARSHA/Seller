@@ -63,7 +63,7 @@ export async function createSellerProductApi(
       }
     })
   ) {
-    throw new Error('Upload at least one product image before submitting.');
+    throw new Error('Provide at least one valid HTTPS product image URL before submitting.');
   }
 
   const res = await fetchApi<{ success: boolean; product: Product }>('/api/seller/products', {
