@@ -4,9 +4,9 @@ service firebase.storage {
   match /b/{bucket}/o {
     match /sellers/{sellerUid}/products/{imageFile} {
       allow read: if true;
-      allow create, update: if request.auth != null
+      allow create: if request.auth != null
         && request.auth.uid == sellerUid
-        && imageFile.matches('^[0-9a-f-]{36}\\.(jpg|png|webp)$')
+        && imageFile.matches('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(jpg|png|webp)$')
         && request.resource.size > 0
         && request.resource.size <= 10 * 1024 * 1024
         && request.resource.contentType.matches('^image/(jpeg|png|webp)$');
